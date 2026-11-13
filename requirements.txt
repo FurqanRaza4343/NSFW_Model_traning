@@ -1,0 +1,7 @@
+# Local machine only (cloud deps are declared inside modal_app.py)
+modal>=1.6
+streamlit
+httpx
+pytest
+Pillow
+python-dotenv

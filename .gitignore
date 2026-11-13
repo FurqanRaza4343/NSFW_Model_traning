@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.env
+*.pyc
+.pytest_cache/
+test_images/
+*.jfif
+results*.csv
+.modal.toml
