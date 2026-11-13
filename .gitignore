@@ -7,3 +7,4 @@ test_images/
 *.jfif
 results*.csv
 .modal.toml
+eval_data/

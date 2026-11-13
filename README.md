@@ -41,13 +41,17 @@ with 50-100 varied, legal images before trusting them.
 ## Files
 
 ```
-modal_app.py      Modal app: image, Volume, /moderate endpoint, Streamlit UI function
-classifier.py     Loads the 3 models once, validates image, runs inference
-config.py         Model ids, limits, thresholds, decide()
-schemas.py        Response schema
-ui_app.py         Streamlit test UI
-local_test.py     Run the models on your laptop, no Modal needed
-tests/test_api.py API tests against the deployed endpoint
+modal_app.py       Modal app: image, Volume, /moderate endpoint, Streamlit UI function
+classifier.py      Loads the 3 models once, validates image, runs inference
+config.py          Model ids, limits, thresholds, decide()
+schemas.py         Response schema
+ui_app.py          Streamlit test UI
+backend_client.py  Client for YOUR backend: retries, timeouts, fails private
+backend_example.py Example FastAPI /upload route using the client
+evaluate.py        Threshold calibration on your labelled images (laptop)
+local_test.py      Run the models on your laptop, no Modal needed
+tests/test_api.py      API tests against the deployed endpoint
+tests/test_backend.py  Unit tests for backend_client (no network)
 ```
 
 ## Setup
@@ -101,11 +105,35 @@ python local_test.py <folder>     # local run; set HF_HOME to where the models a
 
 The Streamlit UI is deployed together with the API (password protected). Locally: `streamlit run ui_app.py`.
 
-## Cost notes (estimates, check the Modal dashboard)
+## Use it from your backend
 
-- CPU 1 core, 2 GiB memory, container stops 60 s after the last request.
-- Roughly $0.06 per running hour; a test session costs well under 1 cent.
-- Set a spend limit in the Modal dashboard.
+```python
+from backend_client import ModerationClient
+moderation = ModerationClient()                 # reads MODERATION_URL / MODERATION_API_KEY
+result = await moderation.check(image_bytes, filename)
+# result.status: publish | pending_review | rejected | private
+```
+
+`private` means something went wrong (timeout, 5xx, bad key): the image must NOT be published.
+See `backend_example.py` for a complete FastAPI route.
+
+## Calibrate the thresholds
+
+Put your own legal images in `eval_data/safe/` and `eval_data/unsafe/` (at least 50 each), then run
+`python evaluate.py`. It lists the threshold combinations with zero false negatives and the fewest
+false positives. Copy the chosen values into `config.py` and run `modal deploy modal_app.py`.
+
+## Stability and cost
+
+- Python packages are pinned to exact versions in `modal_app.py`.
+- Models live in a Modal Volume and the service loads them in offline mode, so it never depends on
+  Hugging Face being reachable at runtime. `modal run modal_app.py` refreshes the cache.
+- `max_containers=3` caps parallel containers, so the maximum cost is capped too.
+- 1 CPU core, 2 GiB memory (measured peak ~750 MiB), container stops 60 s after the last request.
+- Measured: cold start ~11-14 s, warm model time ~1 s per image.
+- Roughly $0.06 per running hour (estimate); a test session costs well under 1 cent. Set a spend limit
+  in the Modal dashboard and check Usage there.
+- Logs (scores, decision, latency; never image content): `modal app logs image-moderation`.
 
 ## Limitations
 

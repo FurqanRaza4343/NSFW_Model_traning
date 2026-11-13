@@ -1,7 +1,14 @@
-# Local machine only (cloud deps are declared inside modal_app.py)
+# Local machine only. Cloud dependencies are pinned inside modal_app.py.
 modal>=1.6
 streamlit
 httpx
+fastapi
+uvicorn
+python-multipart
+python-dotenv
 pytest
 Pillow
-python-dotenv
+# only needed to run the models on your laptop (local_test.py, evaluate.py):
+torch
+transformers
+timm
