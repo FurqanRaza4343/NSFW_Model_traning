@@ -102,7 +102,7 @@ with tab_test:
             f"""
 Three models look at every image and two scores are produced (0 to 1):
 - **Explicit score**: the highest NSFW signal among the three models.
-- **Suggestive score**: nudity or suggestive content (the "sexy" class).
+- **Suggestive score**: nudity or suggestive content (the "adult" class).
 
 | Scores | Meaning | Decision |
 |---|---|---|
@@ -313,7 +313,7 @@ with tab_api:
   "suggestive_score": 0.99,         // nudity / suggestive score, 0 to 1
   "scores": {"normal": 0.26, "nsfw": 0.74},
   "details": {"falconsai": {...}, "marqo": {...}, "luke": {...}},   // per-model scores
-  "reasons": ["marqo_nsfw=0.74", "luke_sexy=1.00"],
+  "reasons": ["marqo_nsfw=0.74", "luke_adult=1.00"],
   "model": "ensemble(...)",
   "latency_ms": 1075.0
 }''', language="json")
@@ -380,7 +380,7 @@ any outside AI service). Their outputs are combined, and the **most cautious ans
 
 **Why three models?** Each model has blind spots, and one model's miss is often caught by another.
 We saw this in a real test: a semi-nude artistic photo got an NSFW score of only **0.0005** from the first
-model (a miss!), but **0.74** from the second and a **"sexy" score of 0.9998** from the third.
+model (a miss!), but **0.74** from the second and an **"adult" score of 0.9998** from the third.
 """
     )
 
@@ -392,11 +392,11 @@ model (a miss!), but **0.74** from the second and a **"sexy" score of 0.9998** f
 | **Hugging Face id** | `Falconsai/nsfw_image_detection` | `Marqo/nsfw-image-detection-384` | `LukeJacob2023/nsfw-image-detector` |
 | **Type** | Vision Transformer (ViT-base), fine-tuned from `google/vit-base-patch16-224-in21k` | Tiny Vision Transformer (ViT-tiny, 384 px input) | Vision Transformer (ViT-base) |
 | **Download size** | 327 MB | 22 MB | 343 MB |
-| **Output classes** | `normal`, `nsfw` | `SFW`, `NSFW` | `drawings`, `hentai`, `neutral`, `porn`, `sexy` |
+| **Output classes** | `normal`, `nsfw` | `SFW`, `NSFW` | `drawings`, `hentai`, `neutral`, `porn`, `adult` (the model's original label for this class is "sexy"; this service shows it as "adult") |
 | **Training data** | ~80,000 private images (per its model card) | Author's own dataset; reports 98.56% accuracy on it | See its model card |
 | **License** | Apache-2.0 | Apache-2.0 | Apache-2.0 |
-| **Why we use it** | General-purpose explicit-content detector; a solid baseline | Very small and fast; good at partial nudity | Gives nuance instead of yes/no: the **"sexy"** class flags nudity and borderline images; separate classes for drawn/hentai content |
-| **Known weakness** | Missed an artistic nude photo (score 0.0005) | Less detail than the larger models | Over-flags: a swimmer photographed from behind scored "sexy" 0.9998 |
+| **Why we use it** | General-purpose explicit-content detector; a solid baseline | Very small and fast; good at partial nudity | Gives nuance instead of yes/no: the **"adult"** class flags nudity and borderline images; separate classes for drawn/hentai content |
+| **Known weakness** | Missed an artistic nude photo (score 0.0005) | Less detail than the larger models | Over-flags: a swimmer photographed from behind scored "adult" 0.9998 |
 """
     )
     st.caption("Accuracy numbers quoted above are the model authors' own, measured on their own datasets, "
@@ -406,7 +406,7 @@ model (a miss!), but **0.74** from the second and a **"sexy" score of 0.9998** f
     st.markdown(
         f"""
 - **Explicit score** = the highest of: Falconsai *nsfw*, Marqo *NSFW*, LukeJacob *porn + hentai*.
-- **Suggestive score** = LukeJacob *sexy*.
+- **Suggestive score** = LukeJacob *adult*.
 
 | Rule | Decision |
 |---|---|

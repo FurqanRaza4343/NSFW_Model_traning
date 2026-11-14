@@ -28,7 +28,7 @@ MAX_SELF_SERVICE_KEYS = 20           # cap on keys created from the UI
 
 # --- Decision policy (PROVISIONAL - calibrate on your own labelled images) ---
 # nsfw_score = max(Falconsai nsfw, Marqo NSFW, Luke porn+hentai)   -> explicit content
-# suggestive_score = Luke "sexy"                                    -> nudity / suggestive / borderline
+# suggestive_score = Luke "adult"                                    -> nudity / suggestive / borderline
 REJECT_THRESHOLD = 0.50       # nsfw_score >= this  -> reject
 REVIEW_THRESHOLD = 0.30       # nsfw_score >= this  -> manual review
 SUGGESTIVE_THRESHOLD = 0.50   # suggestive_score >= this -> manual review

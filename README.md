@@ -16,15 +16,15 @@ The frontend must never call Modal directly; only the backend holds the API key.
 |---|---|
 | `Falconsai/nsfw_image_detection` | ViT-base, normal / nsfw |
 | `Marqo/nsfw-image-detection-384` | tiny ViT (timm), NSFW / SFW; catches partial nudity |
-| `LukeJacob2023/nsfw-image-detector` | ViT-base, 5 classes (drawings, hentai, neutral, porn, sexy) |
+| `LukeJacob2023/nsfw-image-detector` | ViT-base, 5 classes (drawings, hentai, neutral, porn, adult) |
 
 Why an ensemble: in our tests Falconsai alone scored a semi-nude artistic photo as 0.0005 NSFW (a miss).
-Marqo and the "sexy" class of the 5-class model catch it.
+Marqo and the "adult" class of the 5-class model catch it.
 
 ## Decision policy (provisional - calibrate on your own images)
 
 - `nsfw_score` = max(Falconsai nsfw, Marqo NSFW, LukeJacob porn + hentai)
-- `suggestive_score` = LukeJacob "sexy"
+- `suggestive_score` = LukeJacob "adult"
 
 | Condition | Decision |
 |---|---|
@@ -92,7 +92,7 @@ Response (example):
   "suggestive_score": 0.99,
   "scores": {"normal": 0.26, "nsfw": 0.74},
   "details": {"falconsai": {}, "marqo": {}, "luke": {}},
-  "reasons": ["marqo_nsfw=0.74", "luke_sexy=1.00"],
+  "reasons": ["marqo_nsfw=0.74", "luke_adult=1.00"],
   "model": "ensemble(...)",
   "latency_ms": 1075.0
 }

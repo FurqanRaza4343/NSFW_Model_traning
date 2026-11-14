@@ -30,7 +30,7 @@ The first request after a quiet period takes ~10-15 s (cold start); normal reque
   "suggestive_score": 0.99,
   "scores": {"normal": 0.26, "nsfw": 0.74},
   "details": {"falconsai": {}, "marqo": {}, "luke": {}},
-  "reasons": ["marqo_nsfw=0.74", "luke_sexy=1.00"],
+  "reasons": ["marqo_nsfw=0.74", "luke_adult=1.00"],
   "model": "ensemble(...)",
   "latency_ms": 1075.0
 }

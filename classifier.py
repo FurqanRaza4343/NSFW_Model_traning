@@ -69,6 +69,8 @@ class NSFWClassifier:
 
         falcons = self._hf_probs(self.f_proc, self.f_model, img)
         luke = self._hf_probs(self.l_proc, self.l_model, img)
+        # The model's own label for this class is "sexy"; this service reports it as "adult".
+        luke = {("adult" if k == "sexy" else k): v for k, v in luke.items()}
         with torch.no_grad():
             mp = torch.softmax(self.m_model(self.m_tf(img).unsqueeze(0)), -1)[0].tolist()
         marqo = {self.m_labels[i].lower(): round(v, 6) for i, v in enumerate(mp)}
@@ -79,12 +81,12 @@ class NSFWClassifier:
             "luke_porn_hentai": round(luke.get("porn", 0.0) + luke.get("hentai", 0.0), 6),
         }
         nsfw = max(explicit.values())
-        suggestive = luke.get("sexy", 0.0)
+        suggestive = luke.get("adult", 0.0)
         decision = config.decide(nsfw, suggestive)
 
         reasons = [f"{k}={v:.2f}" for k, v in explicit.items() if v >= config.REVIEW_THRESHOLD]
         if suggestive >= config.SUGGESTIVE_THRESHOLD:
-            reasons.append(f"luke_sexy={suggestive:.2f}")
+            reasons.append(f"luke_adult={suggestive:.2f}")
 
         return {
             "decision": decision,
