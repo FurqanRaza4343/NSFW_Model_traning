@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Decision = Literal["approve", "review", "reject"]
@@ -15,5 +15,23 @@ class ModerationResponse(BaseModel):
     latency_ms: float
 
 
-class ErrorResponse(BaseModel):
-    error: str
+class ErrorDetail(BaseModel):
+    detail: str
+
+
+class UsageLimits(BaseModel):
+    per_minute: int
+    per_day: int
+
+
+class UsageCounts(BaseModel):
+    minute: int
+    day: int
+    total: int
+
+
+class UsageResponse(BaseModel):
+    name: str
+    limits: Optional[UsageLimits] = None
+    used: Optional[UsageCounts] = None
+    note: Optional[str] = None

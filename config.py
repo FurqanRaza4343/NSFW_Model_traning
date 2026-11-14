@@ -8,6 +8,7 @@ LUKE_ID = "LukeJacob2023/nsfw-image-detector"        # ViT-base, 5 classes
 MODEL_ID = f"ensemble({FALCONSAI_ID}, {MARQO_ID}, {LUKE_ID})"
 MODEL_REVISION = None  # optionally pin commit hashes for reproducibility
 
+API_VERSION = "1.0.0"
 APP_NAME = "image-moderation"
 VOLUME_NAME = "nsfw-model-cache"
 SECRET_NAME = "moderation-auth"

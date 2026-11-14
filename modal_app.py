@@ -29,6 +29,7 @@ image = (
     )
     .env({"HF_HOME": config.CACHE_DIR})
     .add_local_python_source("config", "classifier", "schemas", "keys")
+    .add_local_dir("docs", "/root/docs")   # documentation page served at "/"
 )
 
 volume = modal.Volume.from_name(config.VOLUME_NAME, create_if_missing=True)
@@ -73,18 +74,34 @@ class Moderator:
 
     @modal.asgi_app()
     def web(self):
-        from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+        from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
         from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import HTMLResponse
+        from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
         import keys as keylib
         from classifier import ImageError
-        from schemas import ModerationResponse
+        from schemas import ErrorDetail, ModerationResponse, UsageResponse
 
         api = FastAPI(
             title="Image Moderation API",
-            description="POST an image to /v1/moderate with `Authorization: Bearer <your key>`.",
-            version="1.0",
+            version=config.API_VERSION,
+            description=(
+                "Checks an image for nude and explicit content and returns **approve**, **review** or "
+                "**reject**.\n\n"
+                "* Full documentation, quickstart and code examples: [open the guide](/)\n"
+                "* Authenticate with `Authorization: Bearer <API key>` (use the **Authorize** button).\n"
+                "* If anything goes wrong (error, timeout), **keep the image private**."
+            ),
+            openapi_tags=[
+                {"name": "Moderation", "description": "Check images."},
+                {"name": "Account", "description": "Your key's limits and usage."},
+                {"name": "System", "description": "Service status."},
+            ],
+            docs_url="/docs",
+            redoc_url="/redoc",
         )
+        bearer = HTTPBearer(auto_error=False, description="Your API key, for example `mod_live_...`")
         # Browsers may call this API directly. Authorization uses a header (no cookies), and each
         # key can additionally be restricted to certain websites (see "origins" in keys.py).
         api.add_middleware(
@@ -142,14 +159,53 @@ class Moderator:
                     )
             return rec["name"], h
 
-        @api.get("/health")
+        # ---- documentation page at "/" (numbers come from config so they never go out of date) ----
+        try:
+            ui_url = modal.Function.from_name(config.APP_NAME, "ui").get_web_url() or "#"
+        except Exception:
+            ui_url = "#"
+        with open("/root/docs/index.html", encoding="utf-8") as f:
+            docs_page = f.read()
+        for placeholder, value in {
+            "__VERSION__": config.API_VERSION,
+            "__UI_URL__": ui_url,
+            "__PER_MIN__": str(config.DEFAULT_PER_MINUTE),
+            "__PER_DAY__": str(config.DEFAULT_PER_DAY),
+            "__MAX_MB__": str(config.MAX_IMAGE_BYTES // (1024 * 1024)),
+            "__MAX_MP__": str(config.MAX_IMAGE_PIXELS // 1_000_000),
+            "__REJECT__": f"{config.REJECT_THRESHOLD:.2f}",
+            "__REVIEW__": f"{config.REVIEW_THRESHOLD:.2f}",
+            "__SUGG__": f"{config.SUGGESTIVE_THRESHOLD:.2f}",
+        }.items():
+            docs_page = docs_page.replace(placeholder, value)
+
+        @api.get("/", include_in_schema=False, response_class=HTMLResponse)
+        def guide():
+            return HTMLResponse(
+                docs_page,
+                headers={"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"},
+            )
+
+        def bearer_header(credentials) -> str:
+            return f"Bearer {credentials.credentials}" if credentials else ""
+
+        @api.get("/health", tags=["System"], summary="Liveness check")
         def health():
+            """No authentication. If the service was idle the first call can take 10-15 seconds."""
             return {"status": "ok"}
 
-        @api.get("/v1/usage")
-        def usage(authorization: str = Header(default=""), origin: str = Header(default="")):
+        @api.get(
+            "/v1/usage", tags=["Account"], summary="Your limits and usage",
+            response_model=UsageResponse, response_model_exclude_none=True,
+            responses={
+                401: {"model": ErrorDetail, "description": "Missing, wrong or revoked API key"},
+                403: {"model": ErrorDetail, "description": "Key not allowed for this website"},
+            },
+        )
+        def usage(credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                  origin: str = Header(default="")):
             """Your key's limits and how much of them you have used (does not count as a request)."""
-            name, h = authenticate(authorization, origin, count=False)
+            name, h = authenticate(bearer_header(credentials), origin, count=False)
             if h is None:
                 return {"name": name, "note": "admin key: no limits"}
             rec = record_cache[h][0]
@@ -162,11 +218,16 @@ class Moderator:
         # Plain `def` (not async): FastAPI runs it in a worker thread, so the blocking model
         # call never freezes the event loop (e.g. /health keeps answering during inference).
         def moderate(
-            file: UploadFile = File(...),
-            authorization: str = Header(default=""),
+            file: UploadFile = File(..., description="The image (JPEG, PNG, WebP, BMP, GIF, TIFF)."),
+            credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
             origin: str = Header(default=""),
         ):
-            name, _ = authenticate(authorization, origin)
+            """Upload one image (multipart field `file`). Returns the decision and the scores.
+
+            `approve` = safe to publish, `review` = hold for a human, `reject` = do not publish.
+            On any error or timeout keep the image private.
+            """
+            name, _ = authenticate(bearer_header(credentials), origin)
 
             data = file.file.read(config.MAX_IMAGE_BYTES + 1)
             try:
@@ -186,8 +247,18 @@ class Moderator:
             }))
             return result
 
-        api.post("/v1/moderate", response_model=ModerationResponse)(moderate)
-        api.post("/moderate", response_model=ModerationResponse, include_in_schema=False)(moderate)  # old path
+        error_responses = {
+            400: {"model": ErrorDetail, "description": "Empty, corrupt, unsupported or too large image"},
+            401: {"model": ErrorDetail, "description": "Missing, wrong or revoked API key"},
+            403: {"model": ErrorDetail, "description": "Key not allowed for this website"},
+            429: {"model": ErrorDetail, "description": "Rate limit exceeded; see the Retry-After header"},
+            500: {"model": ErrorDetail, "description": "Internal error; keep the image private"},
+        }
+        api.post(
+            "/v1/moderate", response_model=ModerationResponse, responses=error_responses,
+            tags=["Moderation"], summary="Moderate an image",
+        )(moderate)
+        api.post("/moderate", response_model=ModerationResponse, include_in_schema=False)(moderate)  # legacy path
         return api
 
 

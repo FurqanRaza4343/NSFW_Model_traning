@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Moderation API - Documentation</title>
+<meta name="description" content="REST API that checks images for nude and explicit content and returns approve, review or reject.">
+<style>
+:root{
+  --bg:#ffffff; --bg2:#f6f7f9; --card:#ffffff; --text:#1c2230; --muted:#5b6475; --line:#e3e6ec;
+  --accent:#4f46e5; --accent-soft:#eef0ff; --code-bg:#0f1524; --code-text:#e6eaf5;
+  --get:#0b7a4b; --post:#1d4ed8; --ok:#0b7a4b; --warn:#a15c00; --bad:#b42318;
+  --ok-bg:#e8f6ef; --warn-bg:#fff4e0; --bad-bg:#fdecea;
+}
+:root[data-theme="dark"]{
+  --bg:#0e1320; --bg2:#141a2b; --card:#151c2e; --text:#e6eaf5; --muted:#9aa5bd; --line:#26304a;
+  --accent:#8b93ff; --accent-soft:#1d2342; --code-bg:#0a0f1c; --code-text:#e6eaf5;
+  --get:#4ade80; --post:#7aa2ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+  --ok-bg:#12281d; --warn-bg:#2b2111; --bad-bg:#2c1614;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1320; --bg2:#141a2b; --card:#151c2e; --text:#e6eaf5; --muted:#9aa5bd; --line:#26304a;
+    --accent:#8b93ff; --accent-soft:#1d2342; --code-bg:#0a0f1c; --code-text:#e6eaf5;
+    --get:#4ade80; --post:#7aa2ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    --ok-bg:#12281d; --warn-bg:#2b2111; --bad-bg:#2c1614;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+header.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .brand{font-weight:700;font-size:17px;display:flex;align-items:center;gap:8px}
+header.top .spacer{flex:1}
+.pill{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--text);padding:6px 12px;border-radius:8px}
+button:hover,.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+#menuBtn{display:none}
+.layout{display:flex;max-width:1280px;margin:0 auto}
+nav.side{width:270px;flex:none;position:sticky;top:57px;align-self:flex-start;height:calc(100vh - 57px);overflow:auto;padding:18px 14px 40px 20px;border-right:1px solid var(--line)}
+nav.side input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--text);margin-bottom:12px}
+nav.side h4{margin:16px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+nav.side a{display:block;padding:5px 10px;border-radius:6px;color:var(--text);font-size:14.5px}
+nav.side a:hover{background:var(--bg2);text-decoration:none}
+nav.side a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav.side a.sub{padding-left:22px;color:var(--muted)}
+main{flex:1;min-width:0;padding:34px 40px 80px;max-width:940px}
+section{margin-bottom:54px}
+h1{font-size:34px;line-height:1.2;margin:0 0 10px}
+h2{font-size:26px;margin:0 0 12px;padding-top:6px;border-top:1px solid var(--line);padding-top:26px}
+section:first-of-type h2{border-top:none;padding-top:0}
+h3{font-size:19px;margin:28px 0 8px}
+p{margin:10px 0}
+.lead{font-size:18px;color:var(--muted)}
+ul,ol{padding-left:22px} li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{padding:8px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--bg2);font-weight:600;white-space:nowrap}
+code{font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg2);padding:1px 6px;border-radius:5px;border:1px solid var(--line)}
+pre{position:relative;background:var(--code-bg);color:var(--code-text);padding:16px 78px 16px 18px;border-radius:10px;overflow:auto;margin:12px 0;font-size:13.5px;line-height:1.55}
+pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+pre .copy{position:absolute;top:8px;right:8px;padding:3px 9px;font-size:12px;background:#ffffff1a;color:#e6eaf5;border:1px solid #ffffff33}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:18px 0}
+.card{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:16px 18px}
+.card h4{margin:0 0 6px;font-size:16px}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0}
+.stat{border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:var(--card)}
+.stat b{display:block;font-size:24px}
+.stat span{color:var(--muted);font-size:13.5px}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:8px;margin:14px 0}
+.callout.warn{border-color:var(--warn);background:var(--warn-bg)}
+.callout.bad{border-color:var(--bad);background:var(--bad-bg)}
+.callout.ok{border-color:var(--ok);background:var(--ok-bg)}
+.callout p{margin:4px 0}
+.endpoint{border:1px solid var(--line);border-radius:12px;background:var(--card);margin:18px 0;overflow:hidden}
+.endpoint .head{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.endpoint .body{padding:4px 18px 14px}
+.method{font:700 12px ui-monospace,monospace;padding:3px 9px;border-radius:6px;color:#fff}
+.method.get{background:var(--get)} .method.post{background:var(--post)}
+.path{font:600 15px ui-monospace,monospace}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-top:12px}
+.tabs button{padding:5px 11px;font-size:13.5px;border-radius:8px 8px 0 0;border-bottom:none}
+.tabs button.on{background:var(--code-bg);color:var(--code-text);border-color:var(--code-bg)}
+.tabpanel pre{margin-top:0;border-top-left-radius:0}
+.badge{display:inline-block;font-size:12.5px;font-weight:600;padding:1px 8px;border-radius:999px}
+.badge.ok{background:var(--ok-bg);color:var(--ok)} .badge.warn{background:var(--warn-bg);color:var(--warn)} .badge.bad{background:var(--bad-bg);color:var(--bad)}
+.try{border:1px dashed var(--line);border-radius:12px;padding:16px;background:var(--bg2);margin:16px 0}
+.try input[type=password],.try input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);margin:4px 0 10px}
+.try pre{max-height:340px}
+footer{border-top:1px solid var(--line);padding:24px 20px;text-align:center;color:var(--muted);font-size:14px}
+@media (max-width:900px){
+  #menuBtn{display:inline-block}
+  nav.side{position:fixed;left:0;top:57px;z-index:15;background:var(--bg);transform:translateX(-100%);transition:transform .2s;width:280px;box-shadow:0 8px 30px #0004}
+  nav.side.open{transform:none}
+  main{padding:24px 18px 60px}
+  h1{font-size:28px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button id="menuBtn" aria-label="Menu">Menu</button>
+  <div class="brand">&#128737; Image Moderation API <span class="pill">v__VERSION__</span></div>
+  <div class="spacer"></div>
+  <a class="btn" href="/docs">Interactive API (Swagger)</a>
+  <a class="btn primary" href="__UI_URL__" target="_blank" rel="noopener">Get an API key</a>
+  <button id="themeBtn" aria-label="Toggle theme">Theme</button>
+</header>
+
+<div class="layout">
+<nav class="side" id="side">
+  <input id="navSearch" type="search" placeholder="Search the docs...">
+  <h4>Getting started</h4>
+  <a href="#introduction">Introduction</a>
+  <a href="#quickstart">Quickstart</a>
+  <a href="#authentication">Authentication</a>
+  <h4>API reference</h4>
+  <a href="#endpoints">Endpoints overview</a>
+  <a class="sub" href="#post-moderate">POST /v1/moderate</a>
+  <a class="sub" href="#get-usage">GET /v1/usage</a>
+  <a class="sub" href="#get-health">GET /health</a>
+  <a class="sub" href="#legacy">POST /moderate (legacy)</a>
+  <a href="#response">Response reference</a>
+  <a href="#decisions">Decisions &amp; scores</a>
+  <a href="#errors">Errors</a>
+  <a href="#limits">Rate limits</a>
+  <h4>Guides</h4>
+  <a href="#examples">Code examples</a>
+  <a href="#best-practices">Best practices</a>
+  <a href="#models">The models</a>
+  <a href="#security">Security &amp; privacy</a>
+  <h4>More</h4>
+  <a href="#faq">FAQ</a>
+  <a href="#changelog">Changelog</a>
+</nav>
+
+<main id="main">
+
+<section id="introduction">
+  <h1>Image Moderation API</h1>
+  <p class="lead">Send an image, get a decision. The API checks pictures for nude and explicit content and answers <code>approve</code>, <code>review</code> or <code>reject</code> in about a second, so your website or app can decide whether to publish the image.</p>
+
+  <div class="stats">
+    <div class="stat"><b>~1-2 s</b><span>typical response time</span></div>
+    <div class="stat"><b>3 models</b><span>checked on every image</span></div>
+    <div class="stat"><b>__PER_MIN__ / min</b><span>default limit per key</span></div>
+    <div class="stat"><b>__MAX_MB__ MB</b><span>max image size</span></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h4>Simple REST API</h4><p>One endpoint, one image upload, one JSON answer. Works from any language, server or mobile app.</p></div>
+    <div class="card"><h4>Three models, one decision</h4><p>An ensemble of three open models. The most cautious answer wins, so one model's miss is caught by another.</p></div>
+    <div class="card"><h4>Nudity is never auto-approved</h4><p>Explicit and artistic nudity is rejected or sent to review. Borderline images go to a human, not to your users.</p></div>
+    <div class="card"><h4>Your own API keys</h4><p>Each customer gets a key with its own limits and usage, and a key can be revoked at any time.</p></div>
+    <div class="card"><h4>Private by design</h4><p>Images are processed in memory and are not stored. Logs hold scores only, never images.</p></div>
+    <div class="card"><h4>Fail-private contract</h4><p>The API is built around one rule: if anything goes wrong, keep the image private.</p></div>
+  </div>
+
+  <h3>How it works</h3>
+  <pre><code>1. Your app sends the image + your API key  -->  POST /v1/moderate
+2. The API checks the key and your rate limit
+3. Three models look at the image
+4. You get a JSON decision back:
+     approve  -> publish the image
+     review   -> hold it for a human moderator
+     reject   -> keep it private</code></pre>
+</section>
+
+<section id="quickstart">
+  <h2>Quickstart</h2>
+  <ol>
+    <li><b>Get an API key.</b> Open <a href="__UI_URL__" target="_blank" rel="noopener">the web UI</a> (you need the UI password from the service owner), go to the <b>API access</b> tab, enter a name and click <i>Generate my key</i>. Copy the key: it is shown only once.</li>
+    <li><b>Send an image.</b>
+<pre><code>curl -X POST "__BASE_URL__/v1/moderate" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@photo.jpg"</code></pre></li>
+    <li><b>Act on the decision.</b> <code>approve</code> &rarr; publish, <code>review</code> &rarr; send to a moderator, <code>reject</code> &rarr; keep private. On any error, keep the image private.</li>
+  </ol>
+
+  <div class="try" id="tryit">
+    <b>Try it right here</b>
+    <p style="color:var(--muted);margin:4px 0 8px">Uses your key against this API (it counts toward your limits). The key is sent only to this server.</p>
+    <label>API key<input type="password" id="tryKey" placeholder="mod_live_..." autocomplete="off"></label>
+    <label>Image <input type="file" id="tryFile" accept="image/*"></label>
+    <p><button class="btn primary" id="tryBtn">Send image</button> <button class="btn" id="tryUsage">Check my usage</button></p>
+    <pre><code id="tryOut">The response will appear here.</code></pre>
+  </div>
+</section>
+
+<section id="authentication">
+  <h2>Authentication</h2>
+  <p>Every request to <code>/v1/moderate</code> and <code>/v1/usage</code> needs an API key in the <code>Authorization</code> header:</p>
+  <pre><code>Authorization: Bearer mod_live_xxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+  <ul>
+    <li><b>Customer keys</b> start with <code>mod_live_</code>. They have rate limits and can be restricted to certain websites.</li>
+    <li><b>Getting a key:</b> self-service in the <a href="__UI_URL__" target="_blank" rel="noopener">web UI</a> (API access tab), or ask the service owner for a key with custom limits.</li>
+    <li><b>Only a hash is stored.</b> The plain key is shown once at creation and cannot be recovered. If you lose it or it leaks, ask for it to be revoked and create a new one.</li>
+    <li><b>Revocation</b> takes effect within about 30 seconds.</li>
+  </ul>
+  <div class="callout warn"><p><b>Keep keys secret.</b> Call the API from your own backend server whenever possible. A key placed in website JavaScript or inside a mobile app can be extracted by anyone who inspects it. If you must call from a browser, create the key with <i>allowed websites</i>, so browser requests from other sites are rejected. This does not stop non-browser clients, so keep the per-key limits in mind.</p></div>
+  <p><b>Allowed websites (origin lock).</b> When a key has allowed websites, a request that carries an <code>Origin</code> header (all browser requests do) is accepted only if that origin is on the list. Otherwise the API returns <code>403</code>. CORS is enabled for the API, so browsers can call it directly.</p>
+</section>
+
+<section id="endpoints">
+  <h2>Endpoints</h2>
+  <p>Base URL: <code>__BASE_URL__</code></p>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Auth</th><th>Purpose</th></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/v1/moderate</code></td><td>API key</td><td>Moderate one image</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/v1/usage</code></td><td>API key</td><td>Your limits and usage (not counted as a request)</td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td>none</td><td>Liveness check</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/moderate</code></td><td>API key</td><td>Legacy alias of <code>/v1/moderate</code></td></tr>
+    <tr><td><span class="method get">GET</span></td><td><code>/docs</code>, <code>/redoc</code>, <code>/openapi.json</code></td><td>none</td><td>Interactive and machine-readable API description</td></tr>
+  </table>
+
+  <div class="endpoint" id="post-moderate">
+    <div class="head"><span class="method post">POST</span><span class="path">/v1/moderate</span><span style="color:var(--muted)">Moderate an image</span></div>
+    <div class="body">
+      <p>Uploads one image and returns the moderation decision with scores. The request is <code>multipart/form-data</code>.</p>
+      <h3>Request</h3>
+      <table>
+        <tr><th>Where</th><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>Header</td><td><code>Authorization</code></td><td>string</td><td>yes</td><td><code>Bearer &lt;API key&gt;</code></td></tr>
+        <tr><td>Body (form)</td><td><code>file</code></td><td>file</td><td>yes</td><td>The image. Up to __MAX_MB__ MB and __MAX_MP__ megapixels. JPEG, PNG, WebP, BMP, GIF and TIFF are supported. For animated images only the first frame is checked.</td></tr>
+      </table>
+      <h3>Example</h3>
+      <div class="code-tabs" data-snips="curl,python,javascript"></div>
+      <h3>Response <span class="badge ok">200 OK</span></h3>
+<pre><code>{
+  "decision": "reject",
+  "nsfw_score": 0.7405,
+  "suggestive_score": 0.9998,
+  "scores": { "normal": 0.2595, "nsfw": 0.7405 },
+  "details": {
+    "falconsai": { "normal": 0.9995, "nsfw": 0.0005 },
+    "marqo":     { "nsfw": 0.7405, "sfw": 0.2595 },
+    "luke":      { "drawings": 0.0, "hentai": 0.0, "neutral": 0.0001, "porn": 0.0, "adult": 0.9998 }
+  },
+  "reasons": ["marqo_nsfw=0.74", "luke_adult=1.00"],
+  "model": "ensemble(...)",
+  "latency_ms": 1075.0
+}</code></pre>
+      <p>See the <a href="#response">response reference</a> for every field, and <a href="#errors">errors</a> for the failure cases.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="get-usage">
+    <div class="head"><span class="method get">GET</span><span class="path">/v1/usage</span><span style="color:var(--muted)">Your limits and usage</span></div>
+    <div class="body">
+      <p>Returns the limits of the key you send and how much of them you have used. This call does <b>not</b> count toward your rate limit.</p>
+<pre><code>curl "__BASE_URL__/v1/usage" -H "Authorization: Bearer YOUR_API_KEY"</code></pre>
+<pre><code>{
+  "name": "my-shop",
+  "limits": { "per_minute": __PER_MIN__, "per_day": __PER_DAY__ },
+  "used":   { "minute": 3, "day": 41, "total": 512 }
+}</code></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="get-health">
+    <div class="head"><span class="method get">GET</span><span class="path">/health</span><span style="color:var(--muted)">Liveness check</span></div>
+    <div class="body">
+      <p>No authentication. Returns <code>{"status":"ok"}</code> when the service is up. If the service was idle, this request can take 10-15 seconds while it starts.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="legacy">
+    <div class="head"><span class="method post">POST</span><span class="path">/moderate</span><span style="color:var(--muted)">Legacy alias</span></div>
+    <div class="body">
+      <p>Same behaviour as <code>/v1/moderate</code>. It is kept so existing integrations keep working. New integrations should use <code>/v1/moderate</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="response">
+  <h2>Response reference</h2>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>decision</code></td><td>string</td><td><code>approve</code>, <code>review</code> or <code>reject</code>. This is the field your app should act on.</td></tr>
+    <tr><td><code>nsfw_score</code></td><td>number 0-1</td><td><b>Explicit score.</b> The highest NSFW signal among the three models (Falconsai <i>nsfw</i>, Marqo <i>NSFW</i>, LukeJacob <i>porn + hentai</i>).</td></tr>
+    <tr><td><code>suggestive_score</code></td><td>number 0-1</td><td><b>Adult / suggestive score.</b> LukeJacob's <i>adult</i> class: nudity, suggestive and borderline content.</td></tr>
+    <tr><td><code>scores</code></td><td>object</td><td><code>{"normal": 1 - nsfw_score, "nsfw": nsfw_score}</code>, kept for simple integrations.</td></tr>
+    <tr><td><code>details</code></td><td>object</td><td>Raw per-model scores (<code>falconsai</code>, <code>marqo</code>, <code>luke</code>) for logging and debugging.</td></tr>
+    <tr><td><code>reasons</code></td><td>string[]</td><td>Which signals crossed a threshold, for example <code>marqo_nsfw=0.74</code>. Empty for clearly safe images.</td></tr>
+    <tr><td><code>model</code></td><td>string</td><td>Description of the model ensemble used.</td></tr>
+    <tr><td><code>latency_ms</code></td><td>number</td><td>Time the models took, in milliseconds (excludes network and cold start).</td></tr>
+  </table>
+</section>
+
+<section id="decisions">
+  <h2>Decisions &amp; scores</h2>
+  <p>The decision comes from two scores:</p>
+  <table>
+    <tr><th>Condition</th><th>Decision</th><th>What your app should do</th></tr>
+    <tr><td><code>nsfw_score</code> &ge; __REJECT__</td><td><span class="badge bad">reject</span></td><td>Do not publish. Keep private or delete.</td></tr>
+    <tr><td><code>nsfw_score</code> &ge; __REVIEW__, or <code>suggestive_score</code> &ge; __SUGG__</td><td><span class="badge warn">review</span></td><td>Do not publish yet. Send to a human moderator.</td></tr>
+    <tr><td>otherwise</td><td><span class="badge ok">approve</span></td><td>Safe to publish.</td></tr>
+  </table>
+  <ul>
+    <li>Policy: nudity, including artistic nudity, is never auto-approved.</li>
+    <li>Clearly safe images usually score low. Values close to 1 mean the model is very sure.</li>
+    <li>Sports and beach photos (swimwear, shirtless people) can land in <code>review</code>. This is intended: borderline images should be checked by a person.</li>
+    <li>Do not build your own thresholds on <code>nsfw_score</code> unless you have tested them on your own images. Use <code>decision</code>.</li>
+  </ul>
+  <div class="callout"><p>These classifiers are not perfect. Expect some false positives (safe images flagged) and rare false negatives. Keep a human review path for the <code>review</code> decision.</p></div>
+</section>
+
+<section id="errors">
+  <h2>Errors</h2>
+  <p>Errors are returned as JSON with a <code>detail</code> message, for example <code>{"detail": "Unauthorized"}</code>.</p>
+  <table>
+    <tr><th>Status</th><th>Meaning</th><th>What to do</th></tr>
+    <tr><td><span class="badge ok">200</span></td><td>Success</td><td>Use <code>decision</code>.</td></tr>
+    <tr><td><span class="badge warn">400</span></td><td>Empty file, corrupt or unsupported image, file larger than __MAX_MB__ MB, or more than __MAX_MP__ megapixels. The <code>detail</code> says which.</td><td>Ask the user for a different image. Do not retry the same file.</td></tr>
+    <tr><td><span class="badge bad">401</span></td><td>Missing, wrong or revoked API key</td><td>Check the key. Do not retry.</td></tr>
+    <tr><td><span class="badge bad">403</span></td><td>This key is not allowed for the website that sent the request</td><td>Check the key's allowed websites.</td></tr>
+    <tr><td><span class="badge warn">422</span></td><td>The <code>file</code> form field is missing</td><td>Send the image in a form field named <code>file</code>.</td></tr>
+    <tr><td><span class="badge warn">429</span></td><td>Rate limit exceeded</td><td>Wait the number of seconds in the <code>Retry-After</code> header, then retry.</td></tr>
+    <tr><td><span class="badge bad">500 / 502 / 503 / timeout</span></td><td>Service problem or network failure</td><td>Retry with backoff. <b>Keep the image private</b> until you get a decision.</td></tr>
+  </table>
+  <div class="callout ok"><p><b>Golden rule:</b> if you do not receive a clear <code>approve</code>, do not publish the image.</p></div>
+</section>
+
+<section id="limits">
+  <h2>Rate limits</h2>
+  <p>Limits apply <b>per API key</b>:</p>
+  <table>
+    <tr><th>Limit</th><th>Default</th><th>Notes</th></tr>
+    <tr><td>Requests per minute</td><td>__PER_MIN__</td><td>Counted per clock minute. Over the limit: <code>429</code> with <code>Retry-After</code>.</td></tr>
+    <tr><td>Requests per day</td><td>__PER_DAY__</td><td>The day resets at 00:00 UTC.</td></tr>
+    <tr><td>Image size</td><td>__MAX_MB__ MB</td><td>Also max __MAX_MP__ megapixels.</td></tr>
+    <tr><td>Concurrency</td><td>automatic</td><td>The service scales up to a fixed maximum and then queues requests.</td></tr>
+  </table>
+  <ul>
+    <li>Requests answered with <code>401</code>, <code>403</code> or <code>429</code> are <b>not</b> counted. A request that fails with <code>400</code> (bad image) <b>is</b> counted, because the quota is taken before the image is read. <code>/v1/usage</code> is free.</li>
+    <li><b>Cold start:</b> after a quiet period, the first request takes about 10-15 seconds while the models load. Set your client timeout to at least <b>60 seconds</b>.</li>
+    <li>Need higher limits? Ask the service owner for a key with custom limits.</li>
+  </ul>
+</section>
+
+<section id="examples">
+  <h2>Code examples</h2>
+  <p>Replace <code>YOUR_API_KEY</code> with your key. All examples post the image as a form field named <code>file</code> and read the <code>decision</code>.</p>
+  <div class="code-tabs" data-snips="curl,python,javascript,node,php,kotlin,flutter,swift"></div>
+  <p style="color:var(--muted);font-size:14px">The Kotlin, Flutter and Swift snippets follow each platform's standard multipart pattern, but they were not compiled for this documentation. Adapt them to your project.</p>
+
+  <h3>Server-side wrapper that fails private (Python)</h3>
+<pre><code>import requests
+
+def check_image(path):
+    """Returns 'publish', 'pending_review', 'rejected' or 'private'."""
+    for attempt in range(3):
+        try:
+            with open(path, "rb") as f:
+                r = requests.post("__BASE_URL__/v1/moderate",
+                                  headers={"Authorization": "Bearer YOUR_API_KEY"},
+                                  files={"file": f}, timeout=60)
+        except requests.RequestException:
+            continue                              # network problem: retry
+        if r.status_code == 200:
+            return {"approve": "publish", "review": "pending_review",
+                    "reject": "rejected"}.get(r.json()["decision"], "private")
+        if r.status_code == 429:
+            import time; time.sleep(int(r.headers.get("Retry-After", 5)))
+        elif r.status_code &lt; 500:
+            return "private"                      # 400 / 401 / 403: retrying will not help
+    return "private"                              # anything unclear: never publish</code></pre>
+</section>
+
+<section id="best-practices">
+  <h2>Best practices</h2>
+  <ol>
+    <li><b>Call from your backend.</b> Keep the API key on your server. Your website or app uploads the image to your server, your server calls this API.</li>
+    <li><b>Fail private.</b> Publish only on a clear <code>approve</code>. On timeouts, errors or unknown responses, keep the image hidden.</li>
+    <li><b>Hold <code>review</code> images.</b> Show them to a moderator queue before publishing.</li>
+    <li><b>Use a 60-second timeout</b> and retry with backoff on 5xx errors and network failures. Respect <code>Retry-After</code> on <code>429</code>.</li>
+    <li><b>Resize large photos</b> on the client before upload. A 1-2 MB image is plenty for moderation and uploads faster.</li>
+    <li><b>Store the decision</b> with your image record (decision and scores) so you can audit or re-review later.</li>
+    <li><b>Do not hammer the API.</b> Moderate each image once, at upload time.</li>
+    <li><b>Re-check your thresholds</b> if you change policy: ask the service owner, who can tune them on a sample of your own legal images.</li>
+  </ol>
+</section>
+
+<section id="models">
+  <h2>The models</h2>
+  <p>Every image is checked by three independent open-source models (all Apache-2.0 licensed). No image is sent to any outside AI service. The most cautious answer wins, because each model has blind spots. In one real test, a semi-nude artistic photo scored only 0.0005 from the first model (a miss), but 0.74 from the second and an adult score of 0.9998 from the third.</p>
+  <table>
+    <tr><th></th><th>Falconsai</th><th>Marqo</th><th>LukeJacob</th></tr>
+    <tr><th>Model id</th><td><code>Falconsai/nsfw_image_detection</code></td><td><code>Marqo/nsfw-image-detection-384</code></td><td><code>LukeJacob2023/nsfw-image-detector</code></td></tr>
+    <tr><th>Type</th><td>ViT-base, fine-tuned from <code>google/vit-base-patch16-224-in21k</code></td><td>Tiny Vision Transformer (ViT-tiny, 384 px input)</td><td>ViT-base</td></tr>
+    <tr><th>Size</th><td>327 MB</td><td>22 MB</td><td>343 MB</td></tr>
+    <tr><th>Classes</th><td>normal, nsfw</td><td>SFW, NSFW</td><td>drawings, hentai, neutral, porn, adult*</td></tr>
+    <tr><th>Training data</th><td>~80,000 private images (per its model card)</td><td>Author's dataset; reports 98.56% accuracy on it</td><td>See its model card</td></tr>
+    <tr><th>Role</th><td>General explicit-content baseline</td><td>Small, fast, good at partial nudity</td><td>Nuance: separates adult content, drawn content and neutral images</td></tr>
+    <tr><th>Known weakness</th><td>Missed an artistic nude photo</td><td>Less detail than the larger models</td><td>Over-flags sporty images (e.g. swimmers) as adult</td></tr>
+    <tr><th>License</th><td>Apache-2.0</td><td>Apache-2.0</td><td>Apache-2.0</td></tr>
+  </table>
+  <p style="color:var(--muted);font-size:14px">* The model's own label for this class is "sexy"; this API reports it as "adult". Accuracy figures are the authors' own, measured on their own datasets, not on your images.</p>
+</section>
+
+<section id="security">
+  <h2>Security &amp; privacy</h2>
+  <ul>
+    <li><b>Images are not stored.</b> They are processed in memory and discarded after the response.</li>
+    <li><b>Logs contain no images or file names.</b> Only the decision, scores, key name, image size and timing are logged, for monitoring.</li>
+    <li><b>Keys are stored as hashes</b> and are never shown again after creation.</li>
+    <li><b>HTTPS only.</b> All traffic is encrypted in transit.</li>
+    <li><b>Rate limits and revocation</b> protect the service. A leaked key can be revoked without affecting other customers.</li>
+    <li><b>Legal content:</b> only upload images you are allowed to process. You are responsible for the images you send.</li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <h3>Why was my safe image sent to review?</h3>
+  <p>Swimwear, shirtless people, sports and some artwork look similar to nudity to the models. The policy is to let a person decide instead of auto-approving borderline images.</p>
+  <h3>Why is the first request so slow?</h3>
+  <p>The service shuts down when idle to save resources. The first request after a quiet period starts it and loads the models (10-15 seconds). Later requests take about 1-2 seconds.</p>
+  <h3>Can I moderate video?</h3>
+  <p>No. Only still images. For video, send extracted frames. Animated GIFs: only the first frame is checked.</p>
+  <h3>Which image formats work?</h3>
+  <p>JPEG, PNG, WebP, BMP, GIF and TIFF, up to __MAX_MB__ MB and __MAX_MP__ megapixels.</p>
+  <h3>Can I call the API directly from JavaScript in the browser?</h3>
+  <p>Technically yes (CORS is enabled), but the key becomes visible to anyone. Prefer your backend. If you must, restrict the key to your website and keep its limits low.</p>
+  <h3>How do I get more requests per minute or per day?</h3>
+  <p>Ask the service owner for a key with custom limits.</p>
+  <h3>What happens if I lose my key?</h3>
+  <p>It cannot be recovered. Ask for the old key to be revoked and generate a new one.</p>
+  <h3>Is the decision always correct?</h3>
+  <p>No. This is a statistical classifier. Use the <code>review</code> path and keep a human in the loop for sensitive decisions.</p>
+</section>
+
+<section id="changelog">
+  <h2>Changelog</h2>
+  <table>
+    <tr><th>Version</th><th>Date</th><th>Changes</th></tr>
+    <tr><td>1.0.0</td><td>2026-11-14</td><td>Customer API keys with rate limits and website lock. Versioned endpoint <code>/v1/moderate</code>, <code>/v1/usage</code>. Documentation site and interactive API docs. Three-model ensemble with <code>approve / review / reject</code> decisions.</td></tr>
+  </table>
+</section>
+
+</main>
+</div>
+<footer>Image Moderation API v__VERSION__ &middot; <a href="/docs">Interactive API</a> &middot; <a href="/openapi.json">OpenAPI</a> &middot; <a href="#introduction">Back to top</a></footer>
+
+<!-- Code snippets (raw text so quotes and backticks need no escaping) -->
+<script type="text/plain" id="snip-curl" data-title="cURL" data-lang="bash">curl -X POST "__BASE_URL__/v1/moderate" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@photo.jpg"</script>
+<script type="text/plain" id="snip-python" data-title="Python" data-lang="python">import requests
+
+with open("photo.jpg", "rb") as f:
+    r = requests.post(
+        "__BASE_URL__/v1/moderate",
+        headers={"Authorization": "Bearer YOUR_API_KEY"},
+        files={"file": f},
+        timeout=60,   # the first request after idle can take ~15 s
+    )
+r.raise_for_status()
+result = r.json()
+print(result["decision"], result["nsfw_score"])</script>
+<script type="text/plain" id="snip-javascript" data-title="JavaScript (browser)" data-lang="javascript">const form = new FormData();
+form.append("file", fileInput.files[0]);   // a File from &lt;input type="file"&gt;
+
+const res = await fetch("__BASE_URL__/v1/moderate", {
+  method: "POST",
+  headers: { Authorization: "Bearer YOUR_API_KEY" },
+  body: form,
+});
+if (!res.ok) {
+  // 400 bad image, 401 bad key, 429 too many requests, 5xx server error
+  // -> keep the image private
+}
+const result = await res.json();
+if (result.decision === "approve") { /* publish */ }
+else if (result.decision === "review") { /* hold for a moderator */ }
+else { /* reject */ }</script>
+<script type="text/plain" id="snip-node" data-title="Node.js 18+" data-lang="javascript">import { readFile } from "node:fs/promises";
+
+const form = new FormData();
+form.append("file", new Blob([await readFile("photo.jpg")]), "photo.jpg");
+
+const res = await fetch("__BASE_URL__/v1/moderate", {
+  method: "POST",
+  headers: { Authorization: "Bearer YOUR_API_KEY" },
+  body: form,
+  signal: AbortSignal.timeout(60000),
+});
+const result = await res.json();
+console.log(res.status, result.decision);</script>
+<script type="text/plain" id="snip-php" data-title="PHP" data-lang="php">&lt;?php
+$ch = curl_init("__BASE_URL__/v1/moderate");
+curl_setopt_array($ch, [
+    CURLOPT_POST           =&gt; true,
+    CURLOPT_HTTPHEADER     =&gt; ["Authorization: Bearer YOUR_API_KEY"],
+    CURLOPT_POSTFIELDS     =&gt; ["file" =&gt; new CURLFile("photo.jpg")],
+    CURLOPT_RETURNTRANSFER =&gt; true,
+    CURLOPT_TIMEOUT        =&gt; 60,
+]);
+$body   = curl_exec($ch);
+$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$result = json_decode($body, true);   // $result["decision"]</script>
+<script type="text/plain" id="snip-kotlin" data-title="Android (Kotlin)" data-lang="kotlin">val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+    .addFormDataPart("file", "photo.jpg", imageFile.asRequestBody("image/jpeg".toMediaType()))
+    .build()
+val request = Request.Builder()
+    .url("__BASE_URL__/v1/moderate")
+    .header("Authorization", "Bearer YOUR_API_KEY")
+    .post(body)
+    .build()
+OkHttpClient().newCall(request).execute().use { response -&gt;
+    val json = response.body?.string()   // parse "decision" from the JSON
+}</script>
+<script type="text/plain" id="snip-flutter" data-title="Flutter (Dart)" data-lang="dart">final request = http.MultipartRequest('POST', Uri.parse('__BASE_URL__/v1/moderate'))
+  ..headers['Authorization'] = 'Bearer YOUR_API_KEY'
+  ..files.add(await http.MultipartFile.fromPath('file', imagePath));
+final response = await http.Response.fromStream(await request.send());
+final result = jsonDecode(response.body);   // result['decision']</script>
+<script type="text/plain" id="snip-swift" data-title="iOS (Swift)" data-lang="swift">let boundary = UUID().uuidString
+var req = URLRequest(url: URL(string: "__BASE_URL__/v1/moderate")!)
+req.httpMethod = "POST"
+req.setValue("Bearer YOUR_API_KEY", forHTTPHeaderField: "Authorization")
+req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+var body = Data()
+body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+body.append(imageData)
+body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+req.httpBody = body
+let (data, _) = try await URLSession.shared.data(for: req)   // JSON with "decision"</script>
+
+<script>
+(function () {
+  var BASE = location.origin;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  // ---- theme ----
+  var root = document.documentElement;
+  try { var t = localStorage.getItem("theme"); if (t) root.setAttribute("data-theme", t); } catch (e) {}
+  $("#themeBtn").addEventListener("click", function () {
+    var dark = getComputedStyle(root).getPropertyValue("--bg").trim() === "#0e1320";
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  });
+
+  // ---- replace the base url placeholder everywhere on the page ----
+  var main = $("#main");
+  main.innerHTML = main.innerHTML.split("__BASE_URL__").join(BASE);
+  $$("pre code").forEach(function (c) { c.textContent = c.textContent; });
+
+  // ---- code tabs (snippets come from the raw-text script tags) ----
+  function snip(id) {
+    var el = document.getElementById("snip-" + id);
+    var text = el.textContent.split("__BASE_URL__").join(BASE)
+      .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    return { title: el.getAttribute("data-title"), text: text };
+  }
+  $$(".code-tabs").forEach(function (box) {
+    var ids = box.getAttribute("data-snips").split(",");
+    var bar = document.createElement("div"); bar.className = "tabs";
+    var panel = document.createElement("div"); panel.className = "tabpanel";
+    var pre = document.createElement("pre"), code = document.createElement("code");
+    pre.appendChild(code); panel.appendChild(pre);
+    ids.forEach(function (id, i) {
+      var s = snip(id), b = document.createElement("button");
+      b.textContent = s.title;
+      b.addEventListener("click", function () {
+        $$("button", bar).forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); code.textContent = s.text;
+      });
+      bar.appendChild(b);
+      if (i === 0) { b.classList.add("on"); code.textContent = s.text; }
+    });
+    box.appendChild(bar); box.appendChild(panel);
+  });
+
+  // ---- copy buttons ----
+  $$("pre").forEach(function (pre) {
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function () {
+      var text = pre.querySelector("code").textContent;
+      var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1200); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+      else done();
+    });
+    pre.appendChild(b);
+  });
+
+  // ---- sidebar: search + active section + mobile menu ----
+  var links = $$("nav.side a");
+  var sections = {};
+  links.forEach(function (a) {
+    var el = document.getElementById(a.getAttribute("href").slice(1));
+    if (el) sections[a.getAttribute("href")] = (el.textContent || "").toLowerCase();
+  });
+  $("#navSearch").addEventListener("input", function (e) {
+    var q = e.target.value.trim().toLowerCase();
+    links.forEach(function (a) {
+      var hit = !q || a.textContent.toLowerCase().indexOf(q) > -1 || (sections[a.getAttribute("href")] || "").indexOf(q) > -1;
+      a.style.display = hit ? "" : "none";
+    });
+  });
+  $("#menuBtn").addEventListener("click", function () { $("#side").classList.toggle("open"); });
+  links.forEach(function (a) { a.addEventListener("click", function () { $("#side").classList.remove("open"); }); });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          links.forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + en.target.id); });
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    links.forEach(function (a) { var el = document.getElementById(a.getAttribute("href").slice(1)); if (el) io.observe(el); });
+  }
+
+  // ---- try-it widget (same origin, so no CORS needed) ----
+  var out = $("#tryOut");
+  function show(status, body, extra) {
+    out.textContent = "HTTP " + status + (extra ? "  " + extra : "") + "\n" + (typeof body === "string" ? body : JSON.stringify(body, null, 2));
+  }
+  $("#tryBtn").addEventListener("click", function () {
+    var key = $("#tryKey").value.trim(), file = $("#tryFile").files[0];
+    if (!key || !file) { out.textContent = "Enter your API key and choose an image first."; return; }
+    out.textContent = "Sending... (the first request after idle can take ~15 seconds)";
+    var fd = new FormData(); fd.append("file", file);
+    fetch(BASE + "/v1/moderate", { method: "POST", headers: { Authorization: "Bearer " + key }, body: fd })
+      .then(function (r) {
+        var retry = r.headers.get("Retry-After");
+        return r.json().then(function (j) { show(r.status, j, retry ? "(Retry-After: " + retry + " s)" : ""); });
+      })
+      .catch(function (e) { out.textContent = "Request failed: " + e + "\nKeep the image private."; });
+  });
+  $("#tryUsage").addEventListener("click", function () {
+    var key = $("#tryKey").value.trim();
+    if (!key) { out.textContent = "Enter your API key first."; return; }
+    fetch(BASE + "/v1/usage", { headers: { Authorization: "Bearer " + key } })
+      .then(function (r) { return r.json().then(function (j) { show(r.status, j); }); })
+      .catch(function (e) { out.textContent = "Request failed: " + e; });
+  });
+})();
+</script>
+</body>
+</html>

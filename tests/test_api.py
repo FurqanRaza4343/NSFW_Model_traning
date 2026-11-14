@@ -127,3 +127,25 @@ def test_revoked_key_rejected():
     store.revoke(name)
     time.sleep(35)                                          # API caches key records for 30 s
     assert post_v1(png_bytes(), key).status_code == 401
+
+
+# ---------------- documentation ----------------
+def test_docs_page_served_at_root():
+    r = httpx.get(f"{URL}/", timeout=120)
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    html = r.text
+    assert "Image Moderation API" in html
+    for placeholder in ("__VERSION__", "__UI_URL__", "__PER_MIN__", "__PER_DAY__", "__MAX_MB__",
+                        "__MAX_MP__", "__REJECT__", "__REVIEW__", "__SUGG__"):
+        assert placeholder not in html                     # all server-side placeholders were filled
+    assert "20 / min" in html and "5 MB" in html          # numbers come from config
+    assert 'id="post-moderate"' in html and "/v1/usage" in html
+
+
+def test_swagger_and_openapi():
+    assert httpx.get(f"{URL}/docs", timeout=60).status_code == 200
+    spec = httpx.get(f"{URL}/openapi.json", timeout=60).json()
+    assert "/v1/moderate" in spec["paths"] and "/v1/usage" in spec["paths"]
+    assert "/moderate" not in spec["paths"]               # legacy path is hidden from the docs
+    assert "HTTPBearer" in spec["components"]["securitySchemes"]
+    assert set(spec["paths"]["/v1/moderate"]["post"]["responses"]) >= {"200", "400", "401", "403", "429", "500"}

@@ -48,7 +48,8 @@ schemas.py         Response schema
 ui_app.py          Streamlit test UI
 keys.py            Customer API keys: hashing, limits, storage logic
 manage_keys.py     Admin CLI: create / list / revoke keys
-INTEGRATION.md     Guide to give to customers (endpoint, limits, examples)
+INTEGRATION.md     Short guide to give to customers (endpoint, limits, examples)
+docs/index.html    Full documentation site, served by the API at its root URL (/)
 backend_client.py  Client for YOUR backend: retries, timeouts, fails private
 backend_example.py Example FastAPI /upload route using the client
 evaluate.py        Threshold calibration on your labelled images (laptop)
@@ -108,6 +109,17 @@ python local_test.py <folder>     # local run; set HF_HOME to where the models a
 ```
 
 The Streamlit UI is deployed together with the API (password protected). Locally: `streamlit run ui_app.py`.
+
+## Documentation
+
+The API serves its own documentation (no login needed):
+
+- `/` : the documentation site (product overview, quickstart, authentication, every endpoint, response
+  and error reference, rate limits, code examples in 8 languages, best practices, models, FAQ, changelog),
+  with a "try it" box. Source: `docs/index.html`. Numbers such as limits and thresholds are filled in from
+  `config.py`, so they never go out of date.
+- `/docs` : interactive Swagger UI with an **Authorize** button; `/redoc` : reference view;
+  `/openapi.json` : machine-readable spec.
 
 ## Give the API to other people (customer keys)
 
