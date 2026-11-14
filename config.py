@@ -19,6 +19,13 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 MAX_IMAGE_PIXELS = 25_000_000
 REQUEST_TIMEOUT_S = 60
 
+# --- Customer API keys ---
+KEYS_DICT = "moderation-keys"        # modal.Dict: sha256(key) -> record
+USAGE_DICT = "moderation-usage"      # modal.Dict: sha256(key) -> counters
+DEFAULT_PER_MINUTE = 20              # requests per minute per customer key
+DEFAULT_PER_DAY = 200                # requests per day (UTC) per customer key
+MAX_SELF_SERVICE_KEYS = 20           # cap on keys created from the UI
+
 # --- Decision policy (PROVISIONAL - calibrate on your own labelled images) ---
 # nsfw_score = max(Falconsai nsfw, Marqo NSFW, Luke porn+hentai)   -> explicit content
 # suggestive_score = Luke "sexy"                                    -> nudity / suggestive / borderline

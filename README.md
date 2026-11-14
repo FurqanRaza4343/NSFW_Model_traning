@@ -46,12 +46,16 @@ classifier.py      Loads the 3 models once, validates image, runs inference
 config.py          Model ids, limits, thresholds, decide()
 schemas.py         Response schema
 ui_app.py          Streamlit test UI
+keys.py            Customer API keys: hashing, limits, storage logic
+manage_keys.py     Admin CLI: create / list / revoke keys
+INTEGRATION.md     Guide to give to customers (endpoint, limits, examples)
 backend_client.py  Client for YOUR backend: retries, timeouts, fails private
 backend_example.py Example FastAPI /upload route using the client
 evaluate.py        Threshold calibration on your labelled images (laptop)
 local_test.py      Run the models on your laptop, no Modal needed
 tests/test_api.py      API tests against the deployed endpoint
 tests/test_backend.py  Unit tests for backend_client (no network)
+tests/test_keys.py     Unit tests for key logic (no network)
 ```
 
 ## Setup
@@ -104,6 +108,22 @@ python local_test.py <folder>     # local run; set HF_HOME to where the models a
 ```
 
 The Streamlit UI is deployed together with the API (password protected). Locally: `streamlit run ui_app.py`.
+
+## Give the API to other people (customer keys)
+
+Each customer gets their own key with limits (default 20 requests/minute, 200/day):
+
+- **Self-service:** open the web UI, tab **API access**, enter a name and click *Generate my key* (needs the UI
+  password; at most 20 self-service keys exist at once).
+- **Admin:** `python manage_keys.py create --name my-shop` or the UI **Admin** tab (separate admin password).
+- Only a hash of each key is stored. Revoke with `manage_keys.py revoke --name ...` (takes effect in ~30 s).
+- Endpoint: `POST /v1/moderate` (the old `/moderate` still works). `GET /v1/usage` shows a key's usage.
+- Your own key (Modal secret `moderation-auth`) stays valid as the admin key and has no limits.
+- Keys live in a `modal.Dict` (expires after 7 idle days), so a daily job (`maintain_keys`) refreshes it and
+  keeps a backup in the Volume.
+- Needs one more secret: `modal secret create ui-admin UI_ADMIN_PASSWORD=<admin-password>`.
+
+See `INTEGRATION.md` for what to hand to customers (limits, errors, code examples).
 
 ## Use it from your backend
 
