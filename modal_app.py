@@ -28,7 +28,7 @@ image = (
         extra_index_url="https://download.pytorch.org/whl/cpu",
     )
     .env({"HF_HOME": config.CACHE_DIR})
-    .add_local_python_source("config", "classifier", "schemas", "keys")
+    .add_local_python_source("config", "classifier", "schemas", "keys", "leads")
     .add_local_dir("docs", "/root/docs")   # documentation page served at "/"
 )
 
@@ -80,6 +80,7 @@ class Moderator:
         from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
         import keys as keylib
+        import leads as leadlib
         from classifier import ImageError
         from schemas import ErrorDetail, ModerationResponse, UsageResponse
 
@@ -116,6 +117,7 @@ class Moderator:
             modal.Dict.from_name(config.KEYS_DICT, create_if_missing=True),
             modal.Dict.from_name(config.USAGE_DICT, create_if_missing=True),
         )
+        leadstore = leadlib.LeadStore(modal.Dict.from_name(config.LEADS_DICT, create_if_missing=True), store.usage)
         record_cache = {}  # sha256(key) -> (record or None, expires_at); revocation takes <= 30 s
 
         def authenticate(authorization: str, origin: str, count: bool = True):
@@ -149,14 +151,23 @@ class Moderator:
                 raise HTTPException(status_code=403, detail="This key is not allowed for this website")
 
             if count:
-                ok, retry_after = store.use(h, rec["per_minute"], rec["per_day"])
-                if not ok:
-                    print(json.dumps({"event": "rate_limited", "key": rec["name"]}))
-                    raise HTTPException(
-                        status_code=429,
-                        detail="Rate limit exceeded. Try again later.",
-                        headers={"Retry-After": str(retry_after)},
-                    )
+                if rec.get("unlimited"):
+                    store.bump_total(h)                      # access-code keys: counted, never limited
+                elif rec.get("lead"):
+                    ok, why = leadstore.consume_trial(rec["lead"])   # free trial: 2 checks per person in total
+                    if not ok:
+                        print(json.dumps({"event": "trial_blocked", "key": rec["name"], "why": why}))
+                        raise HTTPException(status_code=429, detail=leadlib.TRIAL_MESSAGES.get(why, "Trial limit reached."))
+                    store.bump_total(h)
+                else:
+                    ok, retry_after = store.use(h, rec["per_minute"], rec["per_day"])
+                    if not ok:
+                        print(json.dumps({"event": "rate_limited", "key": rec["name"]}))
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Rate limit exceeded. Try again later.",
+                            headers={"Retry-After": str(retry_after)},
+                        )
             return rec["name"], h
 
         # ---- documentation page at "/" (numbers come from config so they never go out of date) ----
@@ -171,6 +182,7 @@ class Moderator:
             "__UI_URL__": ui_url,
             "__PER_MIN__": str(config.DEFAULT_PER_MINUTE),
             "__PER_DAY__": str(config.DEFAULT_PER_DAY),
+            "__TRIAL__": str(config.TRIAL_CHECKS),
             "__MAX_MB__": str(config.MAX_IMAGE_BYTES // (1024 * 1024)),
             "__MAX_MP__": str(config.MAX_IMAGE_PIXELS // 1_000_000),
             "__REJECT__": f"{config.REJECT_THRESHOLD:.2f}",
@@ -209,6 +221,11 @@ class Moderator:
             if h is None:
                 return {"name": name, "note": "admin key: no limits"}
             rec = record_cache[h][0]
+            if rec.get("unlimited"):
+                return {"name": name, "unlimited": True, "used": store.usage_of(h)}
+            if rec.get("lead"):
+                left = leadstore.trial_left(rec["lead"])
+                return {"name": name, "trial": {"limit": config.TRIAL_CHECKS, "used": config.TRIAL_CHECKS - left}}
             return {
                 "name": name,
                 "limits": {"per_minute": rec["per_minute"], "per_day": rec["per_day"]},
@@ -251,7 +268,7 @@ class Moderator:
             400: {"model": ErrorDetail, "description": "Empty, corrupt, unsupported or too large image"},
             401: {"model": ErrorDetail, "description": "Missing, wrong or revoked API key"},
             403: {"model": ErrorDetail, "description": "Key not allowed for this website"},
-            429: {"model": ErrorDetail, "description": "Rate limit exceeded; see the Retry-After header"},
+            429: {"model": ErrorDetail, "description": "Rate limit exceeded (see Retry-After) or the free trial is used up"},
             500: {"model": ErrorDetail, "description": "Internal error; keep the image private"},
         }
         api.post(
@@ -275,43 +292,67 @@ def main(path: str = ""):
 # modal.Dict entries expire after 7 days without a read or write. This job reads every key daily
 # (which keeps them alive) and keeps a JSON backup in the Volume; it restores from the backup
 # if the key Dict is ever found empty.
-light_image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("config", "keys")
+light_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("httpx==0.28.1")
+    .add_local_python_source("config", "keys", "leads")
+)
+sink_secret = modal.Secret.from_name("leads-sink")           # LEADS_WEBHOOK_URL + LEADS_WEBHOOK_TOKEN
+code_secret = modal.Secret.from_name("unlimited-code")       # UNLIMITED_ACCESS_CODE
 
 
-@app.function(image=light_image, volumes={config.CACHE_DIR: volume}, schedule=modal.Period(days=1), timeout=300)
+def _backup_dict(d, path):
+    """Keep a dict alive (reading refreshes the 7-day expiry), restore it from the backup if it is empty."""
+    records = dict(d.items())
+    if not records and os.path.exists(path):
+        with open(path) as f:
+            for k, rec in json.load(f).items():
+                d[k] = rec
+        print(json.dumps({"event": "restored_from_backup", "file": os.path.basename(path)}))
+        records = dict(d.items())
+    with open(path, "w") as f:
+        json.dump(records, f)
+    return records
+
+
+@app.function(image=light_image, volumes={config.CACHE_DIR: volume}, secrets=[sink_secret],
+              schedule=modal.Period(days=1), timeout=300)
 def maintain_keys():
+    import leads as leadlib
+
     keys_dict = modal.Dict.from_name(config.KEYS_DICT, create_if_missing=True)
     usage_dict = modal.Dict.from_name(config.USAGE_DICT, create_if_missing=True)
-    backup_path = os.path.join(config.CACHE_DIR, "keys_backup.json")
+    leads_dict = modal.Dict.from_name(config.LEADS_DICT, create_if_missing=True)
     volume.reload()
-    records = dict(keys_dict.items())
-    if not records and os.path.exists(backup_path):
-        with open(backup_path) as f:
-            for h, rec in json.load(f).items():
-                keys_dict[h] = rec
-        print(json.dumps({"event": "keys_restored_from_backup"}))
-        records = dict(keys_dict.items())
+    records = _backup_dict(keys_dict, os.path.join(config.CACHE_DIR, "keys_backup.json"))
     for h in records:
-        usage_dict.get(h)  # a read refreshes the entry's 7-day expiry
-    with open(backup_path, "w") as f:
-        json.dump(records, f)
+        usage_dict.get(h)
+    lead_records = _backup_dict(leads_dict, os.path.join(config.CACHE_DIR, "leads_backup.json"))
+    # retry leads that could not be written to the Google Sheet earlier
+    url, token = os.environ.get("LEADS_WEBHOOK_URL", ""), os.environ.get("LEADS_WEBHOOK_TOKEN", "")
+    retried = 0
+    for lid, rec in lead_records.items():
+        if not rec.get("webhook_sent") and leadlib.send_webhook(url, token, leadlib.lead_payload(rec)):
+            leads_dict[lid] = dict(rec, webhook_sent=True)
+            retried += 1
     volume.commit()
-    print(json.dumps({"event": "keys_maintained", "keys": len(records)}))
+    print(json.dumps({"event": "maintained", "keys": len(records), "leads": len(lead_records), "webhook_retried": retried}))
 
 
 # ---------------- Streamlit test / onboarding UI ----------------
 ui_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("streamlit==1.40.2", "pillow", "pandas", "httpx==0.28.1")
-    .add_local_python_source("config", "keys")
+    .add_local_python_source("config", "keys", "leads")
     .add_local_file("ui_app.py", "/root/ui_app.py")
 )
-ui_secret = modal.Secret.from_name("ui-auth")
 ui_admin_secret = modal.Secret.from_name("ui-admin")
+# The UI is public: visitors register (name, email, phone, consent) and get a free trial.
+# The old `ui-auth` password secret is intentionally no longer attached.
 
 
-@app.function(image=ui_image, secrets=[ui_secret, ui_admin_secret], scaledown_window=120, timeout=3600,
-              max_containers=2)
+@app.function(image=ui_image, secrets=[ui_admin_secret, code_secret, sink_secret], scaledown_window=120,
+              timeout=3600, max_containers=2)
 @modal.concurrent(max_inputs=10)
 @modal.web_server(8501, startup_timeout=60)
 def ui():

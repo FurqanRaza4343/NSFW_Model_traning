@@ -1,8 +1,11 @@
 """Streamlit UI for the NSFW moderation service.
 
-Tabs: 1) Test images  2) API access (endpoint, keys, examples)  3) About the models  4) Admin.
+Tabs: 1) Check an image  2) API access (endpoint, keys, examples)  3) About the models  4) Admin.
 Runs on Modal (see modal_app.py) or locally:  streamlit run ui_app.py
-The test tab calls the deployed Modal class directly, so no API key is needed there.
+
+Public access: visitors register (name, email, optional phone, consent) and get a small free trial
+(config.TRIAL_CHECKS checks in total). An access code from the owner unlocks unlimited use.
+Images are processed in memory and never stored.
 """
 import hmac
 import io
@@ -14,13 +17,14 @@ import streamlit as st
 from PIL import Image
 
 import config
+import leads as leadlib
 
 st.set_page_config(page_title="Image Moderation", page_icon="🛡️", layout="wide")
 
 ALLOWED_TYPES = ["jpg", "jpeg", "jfif", "jpe", "png", "webp", "bmp", "gif", "tif", "tiff"]
 
 # =====================================================================================
-# Password gate (everyone who uses this UI needs the UI password)
+# Optional password gate (only if UI_PASSWORD is set; the public deployment does not set it)
 # =====================================================================================
 PASSWORD = os.environ.get("UI_PASSWORD", "")
 if PASSWORD:
@@ -72,21 +76,101 @@ BADGE = {
     "reject": ("⛔ UNSAFE (reject)", "red"),
 }
 
+# =====================================================================================
+# Leads, trial and access code
+# =====================================================================================
+ACCESS_CODE = os.environ.get("UNLIMITED_ACCESS_CODE", "")
+SINK_URL = os.environ.get("LEADS_WEBHOOK_URL", "")
+SINK_TOKEN = os.environ.get("LEADS_WEBHOOK_TOKEN", "")
+CONTACT = "linkedin.com/in/furqan-raza-879504351"
+CONSENT = ("I agree that my name, email and phone number are stored and used to give me access and to contact me "
+           "about this project.")
+PRIVACY = ("Your uploaded images are processed in memory and are **not stored**. Only your name, email and phone "
+           f"(optional) are saved. To have your data deleted, contact the owner: {CONTACT}")
+
+
+@st.cache_resource
+def get_leads():
+    import modal
+
+    return leadlib.LeadStore(
+        modal.Dict.from_name(config.LEADS_DICT, create_if_missing=True),
+        modal.Dict.from_name(config.USAGE_DICT, create_if_missing=True),
+    )
+
+
+def push_lead(lid, rec, event="registered"):
+    """Send the lead to the Google Sheet (if configured). The Modal copy is always kept."""
+    ok = leadlib.send_webhook(SINK_URL, SINK_TOKEN, leadlib.lead_payload(rec, event))
+    if event == "registered":
+        get_leads().mark_webhook(lid, ok)
+
+
+def current_lead():
+    lid = st.session_state.get("lead_id")
+    if not lid:
+        return None, None
+    rec = get_leads().get(lid)
+    if not rec:                                   # deleted by the admin
+        st.session_state.pop("lead_id", None)
+        return None, None
+    return lid, rec
+
+
+def try_unlock(code, lid, rec):
+    ok, msg = leadlib.verify_code(get_leads().usage, code, ACCESS_CODE, lid)
+    if ok:
+        st.session_state["unlocked"] = True
+        push_lead(lid, rec, "unlocked")
+    return ok, msg
+
+
+def registration_form(prefix):
+    st.markdown("**Create your free access**")
+    with st.form(f"register_{prefix}"):
+        name = st.text_input("Full name")
+        email = st.text_input("Email")
+        phone = st.text_input("Phone number" + ("" if config.REQUIRE_PHONE else " (optional)"))
+        consent = st.checkbox(CONSENT)
+        code = st.text_input("Access code (optional, for unlimited use)", type="password")
+        go = st.form_submit_button("Continue")
+    st.caption(PRIVACY)
+    if go:
+        try:
+            lid, rec, is_new = get_leads().register(name, email, phone, consent)
+        except leadlib.LeadError as e:
+            st.error(str(e))
+            return
+        st.session_state["lead_id"] = lid
+        if is_new:
+            push_lead(lid, rec)
+        if code:
+            ok, msg = try_unlock(code, lid, rec)
+            if not ok:
+                st.session_state["flash"] = msg
+        st.rerun()
+
+
+def unlock_form(lid, rec, prefix):
+    with st.form(f"unlock_{prefix}"):
+        code = st.text_input("Access code", type="password")
+        go = st.form_submit_button("Unlock unlimited access")
+    if go:
+        ok, msg = try_unlock(code, lid, rec)
+        if ok:
+            st.rerun()
+        else:
+            st.error(msg)
+
+
 BASE_URL = get_base_url()
 ENDPOINT = f"{BASE_URL}/v1/moderate"
 
-st.title("🛡️ Image Moderation")
-st.caption("Detects nude / explicit images with an ensemble of 3 open models. Runs on Modal cloud.")
-
-tab_test, tab_api, tab_models, tab_admin = st.tabs(
-    ["🧪 Test images", "🔑 API access", "🧠 About the models", "🛠️ Admin"]
-)
-
-# =====================================================================================
-# Tab 1: test images
-# =====================================================================================
-with tab_test:
-    st.sidebar.header("Thresholds (test tab only)")
+# thresholds: fixed from config for everyone; only the admin can experiment with sliders
+admin_ok = st.session_state.get("admin_ok", False)
+reject_t, review_t, sugg_t = config.REJECT_THRESHOLD, config.REVIEW_THRESHOLD, config.SUGGESTIVE_THRESHOLD
+if admin_ok:
+    st.sidebar.header("Threshold lab (admin only)")
     reject_t = st.sidebar.slider("Unsafe if explicit score >=", 0.0, 1.0, float(config.REJECT_THRESHOLD), 0.01)
     review_t = st.sidebar.slider("Uncertain if explicit score >=", 0.0, 1.0, float(config.REVIEW_THRESHOLD), 0.01)
     sugg_t = st.sidebar.slider("Uncertain if suggestive/nudity score >=", 0.0, 1.0,
@@ -94,12 +178,42 @@ with tab_test:
     if review_t > reject_t:
         st.sidebar.warning("The uncertain threshold should not be higher than the unsafe threshold.")
     st.sidebar.caption("The live API always uses the thresholds saved in config.py.")
-    st.sidebar.caption(f"Max file size: {config.MAX_IMAGE_BYTES // (1024 * 1024)} MB")
 
-    st.write("Upload one or more images. The score and decision appear below.")
-    with st.expander("How to read the score", expanded=False):
-        st.markdown(
-            f"""
+st.title("🛡️ Image Moderation")
+st.caption("Detects nude / explicit images with an ensemble of 3 open models. Runs on Modal cloud.")
+
+lid, lead = current_lead()
+unlocked = bool(lid) and st.session_state.get("unlocked", False)
+if st.session_state.get("flash"):
+    st.warning(st.session_state.pop("flash"))
+if lid:
+    left = get_leads().trial_left(lid)
+    c_a, c_b = st.columns([6, 1])
+    status = "Unlimited access unlocked" if unlocked else f"Free checks left: **{left}** of {config.TRIAL_CHECKS}"
+    c_a.info(f"Signed in as **{lead['name']}**  ·  {status}")
+    if c_b.button("Sign out"):
+        for k in ("lead_id", "unlocked", "new_key", "cache", "keys_made"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+tab_test, tab_api, tab_models, tab_admin = st.tabs(
+    ["🔍 Check an image", "🔑 API access", "🧠 About the models", "🛠️ Admin"]
+)
+
+# =====================================================================================
+# Tab 1: check an image
+# =====================================================================================
+with tab_test:
+    if not lid:
+        st.subheader("Check an image for nude or explicit content")
+        st.write(f"Register for free access. You get **{config.TRIAL_CHECKS} free checks**; "
+                 "an access code from the owner unlocks unlimited use.")
+        registration_form("check")
+    else:
+        st.write("Upload one or more images. The score and decision appear below.")
+        with st.expander("How to read the score", expanded=False):
+            st.markdown(
+                f"""
 Three models look at every image and two scores are produced (0 to 1):
 - **Explicit score**: the highest NSFW signal among the three models.
 - **Suggestive score**: nudity or suggestive content (the "adult" class).
@@ -113,82 +227,104 @@ Three models look at every image and two scores are produced (0 to 1):
 Policy: nudity (including artistic) is rejected or sent to review, never auto-approved.
 If an error occurs (corrupt file, timeout) keep the image **private**; never publish by default.
 """
-        )
+            )
+        if not unlocked:
+            with st.expander("Have an access code? Unlock unlimited use"):
+                unlock_form(lid, lead, "check")
 
-    files = st.file_uploader("Images (" + ", ".join(ALLOWED_TYPES) + ")", type=ALLOWED_TYPES,
-                             accept_multiple_files=True)
-    st.session_state.setdefault("cache", {})
+        files = st.file_uploader("Images (" + ", ".join(ALLOWED_TYPES) + f"), max {config.MAX_IMAGE_BYTES // (1024 * 1024)} MB each",
+                                 type=ALLOWED_TYPES, accept_multiple_files=True)
+        st.session_state.setdefault("cache", {})
 
-    rows = []
-    if files:
-        mod = get_moderator()
-        for idx, f in enumerate(files):
-            data = f.getvalue()
-            key = (f.name, len(data))
-            if key not in st.session_state["cache"]:
-                t0 = time.perf_counter()
-                try:
-                    with st.spinner(f"Checking {f.name} (the first request can take 10-15 seconds)..."):
-                        res = mod.predict_bytes.remote(data)
-                    res["round_trip_ms"] = round((time.perf_counter() - t0) * 1000)
-                except Exception as e:  # invalid image, network, etc.
-                    res = {"error": str(e)}
-                st.session_state["cache"][key] = res
-            res = st.session_state["cache"][key]
+        rows, blocked, consumed_now = [], None, False
+        if files:
+            mod = get_moderator()
+            for idx, f in enumerate(files):
+                data = f.getvalue()
+                key = (f.name, len(data))
+                if key not in st.session_state["cache"]:
+                    if blocked:
+                        continue
+                    if not unlocked:
+                        ok, why = get_leads().consume_trial(lid)
+                        if not ok:
+                            blocked = (why, leadlib.TRIAL_MESSAGES.get(why, "Limit reached."))
+                            continue
+                    t0 = time.perf_counter()
+                    try:
+                        with st.spinner(f"Checking {f.name} (the first request can take 10-15 seconds)..."):
+                            res = mod.predict_bytes.remote(data)
+                        res["round_trip_ms"] = round((time.perf_counter() - t0) * 1000)
+                    except Exception as e:  # invalid image, network, etc.
+                        res = {"error": str(e)}
+                        if not unlocked:
+                            get_leads().refund_trial(lid)      # no result was delivered: give the check back
+                    st.session_state["cache"][key] = res
+                    consumed_now = True
+                res = st.session_state["cache"][key]
 
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                try:
-                    st.image(Image.open(io.BytesIO(data)), caption=f.name, use_container_width=True)
-                except Exception:
-                    st.warning("Preview not available")
-            with c2:
-                st.subheader(f.name)
-                truth = st.radio("Your own label (optional, used for the accuracy summary)",
-                                 ["not set", "safe", "unsafe"], horizontal=True,
-                                 key=f"label_{idx}_{f.name}_{len(data)}")
-                if "error" in res:
-                    st.error(f"Error: {res['error']} -> keep this image PRIVATE")
-                    rows.append({"file": f.name, "nsfw": None, "suggestive": None,
-                                 "decision": "error (keep private)", "your_label": truth, "ms": None})
-                else:
-                    nsfw = res["nsfw_score"]
-                    sugg = res.get("suggestive_score", 0.0)
-                    decision = config.decide(nsfw, sugg, reject_t, review_t, sugg_t)
-                    label, color = BADGE[decision]
-                    st.markdown(f"### :{color}[{label}]")
-                    st.write(f"**Explicit score**: {nsfw:.4f}")
-                    st.progress(min(max(nsfw, 0.0), 1.0))
-                    st.write(f"**Suggestive / nudity score**: {sugg:.4f}")
-                    st.progress(min(max(sugg, 0.0), 1.0))
-                    if res.get("reasons"):
-                        st.caption("Triggered by: " + ", ".join(res["reasons"]))
-                    with st.expander("Per-model scores"):
-                        st.json(res.get("details", {}))
-                    st.caption(f"Model time: {res['latency_ms']} ms | Total incl. network: {res['round_trip_ms']} ms")
-                    rows.append({"file": f.name, "nsfw": nsfw, "suggestive": sugg, "decision": decision,
-                                 "your_label": truth, "ms": res["latency_ms"]})
-            st.divider()
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    try:
+                        st.image(Image.open(io.BytesIO(data)), caption=f.name, use_container_width=True)
+                    except Exception:
+                        st.warning("Preview not available")
+                with c2:
+                    st.subheader(f.name)
+                    truth = "not set"
+                    if admin_ok:
+                        truth = st.radio("Your own label (admin: used for the accuracy summary)",
+                                         ["not set", "safe", "unsafe"], horizontal=True,
+                                         key=f"label_{idx}_{f.name}_{len(data)}")
+                    if "error" in res:
+                        st.error("This image could not be checked (corrupt, unsupported or too large) -> keep it PRIVATE")
+                        rows.append({"file": f.name, "nsfw": None, "suggestive": None,
+                                     "decision": "error (keep private)", "your_label": truth, "ms": None})
+                    else:
+                        nsfw = res["nsfw_score"]
+                        sugg = res.get("suggestive_score", 0.0)
+                        decision = config.decide(nsfw, sugg, reject_t, review_t, sugg_t)
+                        label, color = BADGE[decision]
+                        st.markdown(f"### :{color}[{label}]")
+                        st.write(f"**Explicit score**: {nsfw:.4f}")
+                        st.progress(min(max(nsfw, 0.0), 1.0))
+                        st.write(f"**Suggestive / nudity score**: {sugg:.4f}")
+                        st.progress(min(max(sugg, 0.0), 1.0))
+                        if res.get("reasons"):
+                            st.caption("Triggered by: " + ", ".join(res["reasons"]))
+                        with st.expander("Per-model scores"):
+                            st.json(res.get("details", {}))
+                        st.caption(f"Model time: {res['latency_ms']} ms | Total incl. network: {res['round_trip_ms']} ms")
+                        rows.append({"file": f.name, "nsfw": nsfw, "suggestive": sugg, "decision": decision,
+                                     "your_label": truth, "ms": res["latency_ms"]})
+                st.divider()
 
-    if rows:
-        st.subheader("Summary")
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True)
-        st.download_button("Download CSV", df.to_csv(index=False).encode(), "results.csv", "text/csv")
+        if consumed_now:
+            st.rerun()          # refresh the "free checks left" counter; results are cached, nothing is re-run
+        if blocked:
+            st.warning(blocked[1])
+            if blocked[0] == "trial_used" and not unlocked:
+                unlock_form(lid, lead, "blocked")
 
-        labelled = df[df["your_label"].isin(["safe", "unsafe"]) & df["nsfw"].notna()]
-        if len(labelled):
-            st.subheader("Accuracy on the images you labelled")
-            safe = labelled[labelled["your_label"] == "safe"]
-            unsafe = labelled[labelled["your_label"] == "unsafe"]
-            false_pos = int((safe["decision"] != "approve").sum())
-            false_neg = int((unsafe["decision"] == "approve").sum())
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Labelled images", len(labelled))
-            m2.metric("False positives (safe image flagged)", f"{false_pos} / {len(safe)}")
-            m3.metric("False negatives (unsafe image approved)", f"{false_neg} / {len(unsafe)}")
-            st.caption("Aim for zero false negatives first, then reduce false positives with the sliders. "
-                       "Use at least 50-100 varied images before trusting the numbers.")
+        if rows:
+            st.subheader("Summary")
+            df = pd.DataFrame(rows)
+            st.dataframe(df.drop(columns=["your_label"]) if not admin_ok else df, use_container_width=True)
+            st.download_button("Download CSV", df.to_csv(index=False).encode(), "results.csv", "text/csv")
+
+            labelled = df[df["your_label"].isin(["safe", "unsafe"]) & df["nsfw"].notna()]
+            if admin_ok and len(labelled):
+                st.subheader("Accuracy on the images you labelled")
+                safe = labelled[labelled["your_label"] == "safe"]
+                unsafe = labelled[labelled["your_label"] == "unsafe"]
+                false_pos = int((safe["decision"] != "approve").sum())
+                false_neg = int((unsafe["decision"] == "approve").sum())
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Labelled images", len(labelled))
+                m2.metric("False positives (safe image flagged)", f"{false_pos} / {len(safe)}")
+                m3.metric("False negatives (unsafe image approved)", f"{false_neg} / {len(unsafe)}")
+        with st.expander("Privacy"):
+            st.markdown(PRIVACY)
 
 # =====================================================================================
 # Tab 2: API access
@@ -260,44 +396,54 @@ with tab_api:
     st.code(f"POST {ENDPOINT}", language="text")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Requests per minute", config.DEFAULT_PER_MINUTE)
-    c2.metric("Requests per day", config.DEFAULT_PER_DAY)
+    c1.metric("Free trial", f"{config.TRIAL_CHECKS} checks")
+    c2.metric("With access code", "Unlimited")
     c3.metric("Max image size", f"{config.MAX_IMAGE_BYTES // (1024 * 1024)} MB")
     c4.metric("Typical speed", "~1-2 s")
-    st.caption("Limits apply per API key (the daily limit resets at 00:00 UTC). The first request after a quiet "
-               "period can take 10-15 seconds (cold start). Need more? Ask the admin for a custom limit.")
+    st.caption("Registered visitors get a free trial of a few checks (shared between the web app and the API). "
+               "The owner can give you an access code for unlimited use, or a key with custom limits. "
+               "The first request after a quiet period can take 10-15 seconds (cold start).")
 
     st.subheader("1. Get your API key")
-    store = get_store()
-    st.session_state.setdefault("keys_made", 0)
-    with st.form("make_key"):
-        kname = st.text_input("Name for your key (your app or website, e.g. my-shop)")
-        korigins = st.text_input("Allowed websites (optional, comma separated, e.g. https://myshop.com)",
-                                 help="If set, browser requests from other websites are blocked. Does not apply "
-                                      "to server-to-server calls.")
-        make = st.form_submit_button("Generate my key")
-    if make:
+    lid, lead = current_lead()
+    if not lid:
+        st.info("Register first (name, email, optional phone) to get your key.")
+        registration_form("api")
+    else:
         import keys as keylib
 
-        if st.session_state["keys_made"] >= 3:
-            st.error("You have already created 3 keys in this session. Ask the admin for more.")
-        else:
-            try:
-                new_key, rec = store.create(
-                    kname, source="self_service",
-                    origins=[o for o in korigins.split(",") if o.strip()],
-                )
-                st.session_state["keys_made"] += 1
-                st.session_state["new_key"] = (new_key, rec["name"])
-            except keylib.KeyError_ as e:
-                st.error(str(e))
-    if st.session_state.get("new_key"):
-        k, kn = st.session_state["new_key"]
-        st.success(f"Key created for **{kn}**. Copy it now: it is shown only once and cannot be recovered.")
-        st.code(k, language="text")
-        st.warning("Keep this key secret. Best practice: call the API from YOUR backend server. A key placed in "
-                   "website JavaScript or inside a mobile app can be extracted by anyone. If it leaks, ask the "
-                   "admin to revoke it and make a new one.")
+        store = get_store()
+        unl = st.session_state.get("unlocked", False)
+        st.write("Unlimited access is unlocked: your key has no limits." if unl else
+                 f"Your key comes with the free trial: **{config.TRIAL_CHECKS} checks in total**, shared with the web app. "
+                 "Unlock unlimited use with an access code in the **Check an image** tab.")
+        st.session_state.setdefault("keys_made", 0)
+        with st.form("make_key"):
+            korigins = st.text_input("Allowed websites (optional, comma separated, e.g. https://myshop.com)",
+                                     help="If set, browser requests from other websites are blocked. Does not apply "
+                                          "to server-to-server calls.")
+            make = st.form_submit_button("Generate my key")
+        if make:
+            if st.session_state["keys_made"] >= 3:
+                st.error("You have already created 3 keys in this session. Please contact the owner.")
+            else:
+                try:
+                    for prefix in ("lead-", "vip-"):          # one active key per person
+                        store.revoke(prefix + lid[:10])
+                    new_key, rec = store.create(("vip-" if unl else "lead-") + lid[:10], source="self_service",
+                                                origins=[o for o in korigins.split(",") if o.strip()],
+                                                lead=lid, unlimited=unl)
+                    st.session_state["keys_made"] += 1
+                    st.session_state["new_key"] = (new_key, rec["name"])
+                except keylib.KeyError_ as e:
+                    st.error(str(e))
+        if st.session_state.get("new_key"):
+            k, kn = st.session_state["new_key"]
+            st.success("Your key is ready. Copy it now: it is shown only once and cannot be recovered. "
+                       "(Generating a new key replaces the old one.)")
+            st.code(k, language="text")
+            st.warning("Keep this key secret. Best practice: call the API from YOUR backend server. A key placed in "
+                       "website JavaScript or inside a mobile app can be extracted by anyone.")
 
     st.subheader("2. Send an image")
     lang = st.selectbox("Language", list(EXAMPLES))
@@ -331,7 +477,7 @@ with tab_api:
 | 400 | Empty, corrupt or too large image | Ask the user for another image |
 | 401 | Missing, wrong or revoked key | Check your key |
 | 403 | Key not allowed for this website | Check the allowed websites |
-| 429 | Too many requests | Wait for `Retry-After` seconds |
+| 429 | Too many requests, or the free trial is used up | Wait for `Retry-After` seconds, or ask the owner for an access code |
 | 5xx | Server problem | Retry later. **Keep the image private** |
 
 **Golden rule:** if anything goes wrong (timeout, error, no answer), keep the image **private**. Never publish by default.
@@ -341,7 +487,7 @@ Other endpoints: `GET /v1/usage` (your limits and usage, needs your key), `GET /
     )
 
     st.subheader("4. Try it live")
-    st.caption("Uses your key against the real API, so it counts toward your limits.")
+    st.caption("Uses your key against the real API, so it counts toward your free trial.")
     tk = st.text_input("Your API key", type="password", key="try_key")
     tf = st.file_uploader("Image", type=ALLOWED_TYPES, key="try_file")
     cc1, cc2 = st.columns(2)
@@ -441,8 +587,33 @@ with tab_admin:
     else:
         apw = st.text_input("Admin password", type="password", key="admin_pw")
         if apw and hmac.compare_digest(apw, ADMIN_PW):
+            if not st.session_state.get("admin_ok"):
+                st.session_state["admin_ok"] = True
+                st.rerun()                       # shows the threshold lab in the sidebar
             store = get_store()
+            ls = get_leads()
             import keys as keylib
+
+            st.subheader("Leads (registered users)")
+            st.caption("Google Sheet webhook: " + ("configured" if SINK_URL.startswith("http") else
+                       "NOT configured (leads are only in Modal until you set it up, see leads_setup.txt)"))
+            lead_rows = ls.list()
+            if lead_rows:
+                ldf = pd.DataFrame(lead_rows)[["name", "email", "phone", "created", "trial_used", "webhook_sent"]]
+                st.dataframe(ldf, use_container_width=True)
+                st.download_button("Download leads (CSV)", ldf.to_csv(index=False).encode(), "leads.csv", "text/csv")
+            else:
+                st.write("No registrations yet.")
+            with st.form("delete_lead"):
+                em = st.text_input("Delete a person's data (their email), including their API keys")
+                if st.form_submit_button("Delete"):
+                    if em.strip() and ls.delete(em):
+                        lid_del = leadlib.lead_id(em)
+                        for prefix in ("lead-", "vip-"):
+                            store.revoke(prefix + lid_del[:10])
+                        st.success("Deleted. (Remember to remove the row from the Google Sheet too.)")
+                    else:
+                        st.warning("No lead with that email.")
 
             st.subheader("API keys")
             data = store.list()
@@ -462,17 +633,18 @@ with tab_admin:
             else:
                 st.write("No active keys.")
 
-            st.subheader("Create a key with custom limits")
+            st.subheader("Create a key")
             with st.form("admin_create"):
                 an = st.text_input("Name")
+                unl_admin = st.checkbox("Unlimited (no limits at all)")
                 ap1, ap2 = st.columns(2)
-                pm = ap1.number_input("Per minute", 1, 1000, config.DEFAULT_PER_MINUTE)
-                pd_ = ap2.number_input("Per day", 1, 100000, config.DEFAULT_PER_DAY)
+                pm = ap1.number_input("Per minute (ignored if unlimited)", 1, 1000, config.DEFAULT_PER_MINUTE)
+                pd_ = ap2.number_input("Per day (ignored if unlimited)", 1, 100000, config.DEFAULT_PER_DAY)
                 ao = st.text_input("Allowed websites (optional, comma separated)")
                 if st.form_submit_button("Create"):
                     try:
                         k, rec = store.create(an, source="admin", per_minute=int(pm), per_day=int(pd_),
-                                              origins=[o for o in ao.split(",") if o.strip()])
+                                              origins=[o for o in ao.split(",") if o.strip()], unlimited=unl_admin)
                         st.success("Created. Copy it now (shown once):")
                         st.code(k, language="text")
                     except keylib.KeyError_ as e:

@@ -8,3 +8,4 @@ test_images/
 results*.csv
 .modal.toml
 eval_data/
+leads_setup.txt

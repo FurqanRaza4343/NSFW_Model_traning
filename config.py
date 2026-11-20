@@ -8,7 +8,7 @@ LUKE_ID = "LukeJacob2023/nsfw-image-detector"        # ViT-base, 5 classes
 MODEL_ID = f"ensemble({FALCONSAI_ID}, {MARQO_ID}, {LUKE_ID})"
 MODEL_REVISION = None  # optionally pin commit hashes for reproducibility
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 APP_NAME = "image-moderation"
 VOLUME_NAME = "nsfw-model-cache"
 SECRET_NAME = "moderation-auth"
@@ -25,7 +25,14 @@ KEYS_DICT = "moderation-keys"        # modal.Dict: sha256(key) -> record
 USAGE_DICT = "moderation-usage"      # modal.Dict: sha256(key) -> counters
 DEFAULT_PER_MINUTE = 20              # requests per minute per customer key
 DEFAULT_PER_DAY = 200                # requests per day (UTC) per customer key
-MAX_SELF_SERVICE_KEYS = 20           # cap on keys created from the UI
+MAX_SELF_SERVICE_KEYS = 1000         # cap on keys created from the UI (each key is trial-limited)
+
+# --- Lead capture and free trial ---
+LEADS_DICT = "moderation-leads"       # modal.Dict: sha256(email) -> lead record (name, email, phone, trial)
+TRIAL_CHECKS = 2                     # free image checks per registered person
+GLOBAL_TRIAL_PER_DAY = 300           # free checks per day across everyone (protects the free credits)
+REQUIRE_PHONE = False                # set True to make the phone number mandatory
+
 
 # --- Decision policy (PROVISIONAL - calibrate on your own labelled images) ---
 # nsfw_score = max(Falconsai nsfw, Marqo NSFW, Luke porn+hentai)   -> explicit content

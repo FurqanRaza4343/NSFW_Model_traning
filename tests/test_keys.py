@@ -52,7 +52,8 @@ def test_name_rules_and_duplicates():
         store.create("SAME")                           # duplicate (case-insensitive)
 
 
-def test_self_service_cap():
+def test_self_service_cap(monkeypatch):
+    monkeypatch.setattr(config, "MAX_SELF_SERVICE_KEYS", 5)
     store, _ = make_store()
     for i in range(config.MAX_SELF_SERVICE_KEYS):
         store.create(f"user {i}", source="self_service")
@@ -101,3 +102,17 @@ def test_list_shows_usage_without_secrets():
     row = store.list()[0]
     assert row["used_today"] == 1 and row["origins"] == "https://example.com"
     assert key not in str(store.list())
+
+
+def test_lead_and_unlimited_keys_have_no_rate_limits():
+    store, _ = make_store()
+    key, rec = store.create("lead-abc", source="self_service", lead="lid123")
+    assert rec["lead"] == "lid123" and rec["per_minute"] is None and not rec["unlimited"]
+    key2, rec2 = store.create("vip", source="self_service", unlimited=True)
+    assert rec2["unlimited"] and rec2["per_day"] is None
+    h, _ = store.get_record(key2)
+    store.bump_total(h)
+    store.bump_total(h)
+    assert store.usage_of(h)["total"] == 2
+    rows = {r["name"]: r["limits"] for r in store.list()}
+    assert rows == {"lead-abc": "free trial", "vip": "unlimited"}

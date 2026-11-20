@@ -79,7 +79,8 @@ class KeyStore:
         return sum(1 for _, r in self._records() if r.get("source") == "self_service" and r.get("active"))
 
     def create(self, name: str, source: str = "admin", per_minute: Optional[int] = None,
-               per_day: Optional[int] = None, origins=None) -> Tuple[str, dict]:
+               per_day: Optional[int] = None, origins=None, lead: Optional[str] = None,
+               unlimited: bool = False) -> Tuple[str, dict]:
         name = (name or "").strip()
         if not NAME_RE.match(name):
             raise KeyError_("Name must be 2-40 characters: letters, digits, space, dot, dash, underscore.")
@@ -92,8 +93,11 @@ class KeyStore:
         record = {
             "name": name,
             "created": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(timespec="seconds"),
-            "per_minute": int(per_minute or config.DEFAULT_PER_MINUTE),
-            "per_day": int(per_day or config.DEFAULT_PER_DAY),
+            # lead keys are limited by the lead's free trial; unlimited keys have no limit at all
+            "per_minute": None if (lead or unlimited) else int(per_minute or config.DEFAULT_PER_MINUTE),
+            "per_day": None if (lead or unlimited) else int(per_day or config.DEFAULT_PER_DAY),
+            "lead": lead,
+            "unlimited": bool(unlimited),
             "origins": normalize_origins(origins),
             "active": True,
             "source": source,
@@ -118,7 +122,10 @@ class KeyStore:
             today = int(self.clock() // 86400)
             rows.append({
                 "name": r.get("name"), "active": r.get("active"), "source": r.get("source"),
-                "created": r.get("created"), "per_minute": r.get("per_minute"), "per_day": r.get("per_day"),
+                "created": r.get("created"),
+                "limits": "unlimited" if r.get("unlimited") else ("free trial" if r.get("lead") else
+                          f"{r.get('per_minute')}/min {r.get('per_day')}/day"),
+                "per_minute": r.get("per_minute"), "per_day": r.get("per_day"),
                 "origins": ", ".join(r.get("origins") or []) or "any",
                 "used_today": u.get("dc", 0) if u.get("d") == today else 0,
                 "used_total": u.get("total", 0),
@@ -137,6 +144,13 @@ class KeyStore:
         if allowed:
             self.usage[h] = new_usage
         return allowed, retry
+
+    def bump_total(self, h: str) -> None:
+        """Count a request for an unlimited key (no limit check)."""
+        u = dict(self.usage.get(h) or {})
+        u["total"] = u.get("total", 0) + 1
+        u["last"] = int(self.clock())
+        self.usage[h] = u
 
     def usage_of(self, h: str) -> dict:
         u = self.usage.get(h) or {}

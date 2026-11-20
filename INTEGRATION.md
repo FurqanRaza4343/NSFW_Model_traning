@@ -8,18 +8,22 @@ Authorization: Bearer <your API key>
 Content-Type: multipart/form-data   (field name: file)
 ```
 
-`BASE_URL` and your key are shown on the **API access** tab of the web UI, where you can also generate a key.
+`BASE_URL` is shown on the **API access** tab of the web UI, where you register and generate your key.
 
-## Limits (per key)
+## Access, free trial and limits
 
-| | Default |
+| | |
 |---|---|
-| Requests per minute | 20 |
-| Requests per day (resets 00:00 UTC) | 200 |
+| Free trial | 2 checks per registered person in total (web app and API share it) |
+| Unlimited | with the owner's access code, or an owner-issued key |
+| Owner-issued keys | custom limits (default 20 per minute, 200 per day) |
 | Max image size | 5 MB |
 | Formats | jpg, jpeg, jfif, png, webp, bmp, gif, tiff |
 
-The first request after a quiet period takes ~10-15 s (cold start); normal requests take ~1-2 s. Use a client timeout of at least 60 s.
+Register in the web UI (name, email, optional phone), then generate your key in the **API access** tab.
+When the free trial is used up the API answers `429` with a message; ask the owner for an access code.
+The first request after a quiet period takes ~10-15 s (cold start); normal requests take ~1-2 s.
+Use a client timeout of at least 60 s.
 
 ## Response
 
@@ -49,7 +53,7 @@ The first request after a quiet period takes ~10-15 s (cold start); normal reque
 | 400 | Empty, corrupt or too large image | Ask for another image |
 | 401 | Missing, wrong or revoked key | Check the key |
 | 403 | Key not allowed for this website (origin lock) | Check allowed websites |
-| 429 | Rate limit exceeded | Wait `Retry-After` seconds |
+| 429 | Rate limit exceeded, or the free trial is used up | Wait `Retry-After` seconds, or ask for an access code |
 | 5xx / timeout / network error | Service problem | Retry later and **keep the image private** |
 
 **Golden rule: if anything goes wrong, never publish the image by default.**

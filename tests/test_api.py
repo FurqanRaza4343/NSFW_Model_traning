@@ -138,7 +138,8 @@ def test_docs_page_served_at_root():
     for placeholder in ("__VERSION__", "__UI_URL__", "__PER_MIN__", "__PER_DAY__", "__MAX_MB__",
                         "__MAX_MP__", "__REJECT__", "__REVIEW__", "__SUGG__"):
         assert placeholder not in html                     # all server-side placeholders were filled
-    assert "20 / min" in html and "5 MB" in html          # numbers come from config
+    assert "__TRIAL__" not in html
+    assert "2 free" in html and "5 MB" in html            # numbers come from config
     assert 'id="post-moderate"' in html and "/v1/usage" in html
 
 
@@ -149,3 +150,48 @@ def test_swagger_and_openapi():
     assert "/moderate" not in spec["paths"]               # legacy path is hidden from the docs
     assert "HTTPBearer" in spec["components"]["securitySchemes"]
     assert set(spec["paths"]["/v1/moderate"]["post"]["responses"]) >= {"200", "400", "401", "403", "429", "500"}
+
+
+# ---------------- free trial (registered person) and unlimited keys ----------------
+@pytest.fixture()
+def lead_setup():
+    modal = pytest.importorskip("modal")
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import config
+    import keys as keylib
+    import leads as leadlib
+
+    usage = modal.Dict.from_name(config.USAGE_DICT, create_if_missing=True)
+    ks = keylib.KeyStore(modal.Dict.from_name(config.KEYS_DICT, create_if_missing=True), usage)
+    ls = leadlib.LeadStore(modal.Dict.from_name(config.LEADS_DICT, create_if_missing=True), usage)
+    email = f"pytest{int(time.time())}@example.com"
+    lid, _, _ = ls.register("Pytest User", email, "", True)
+    yield ks, ls, lid
+    for prefix in ("lead-", "vip-"):
+        ks.revoke(prefix + lid[:10])
+    d = modal.Dict.from_name(config.KEYS_DICT)
+    for h, r in list(d.items()):
+        if r["name"].endswith(lid[:10]):
+            d.pop(h)
+    ls.delete(email)
+
+
+def test_free_trial_key_allows_two_checks_then_429(lead_setup):
+    ks, ls, lid = lead_setup
+    key, _ = ks.create("lead-" + lid[:10], source="self_service", lead=lid)
+    img = png_bytes()
+    assert post_v1(img, key).status_code == 200
+    assert post_v1(img, key).status_code == 200
+    r = post_v1(img, key)
+    assert r.status_code == 429 and "trial" in r.json()["detail"].lower()
+    u = httpx.get(f"{URL}/v1/usage", headers={"Authorization": f"Bearer {key}"}, timeout=60).json()
+    assert u["trial"] == {"limit": 2, "used": 2}
+
+
+def test_unlimited_key_is_never_blocked(lead_setup):
+    ks, ls, lid = lead_setup
+    key, _ = ks.create("vip-" + lid[:10], source="self_service", lead=lid, unlimited=True)
+    for _ in range(5):                                      # more than the trial and far above any rate limit
+        assert post_v1(png_bytes(), key).status_code == 200
+    u = httpx.get(f"{URL}/v1/usage", headers={"Authorization": f"Bearer {key}"}, timeout=60).json()
+    assert u["unlimited"] is True and u["used"]["total"] >= 5

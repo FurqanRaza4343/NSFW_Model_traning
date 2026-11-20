@@ -47,6 +47,9 @@ config.py          Model ids, limits, thresholds, decide()
 schemas.py         Response schema
 ui_app.py          Streamlit test UI
 keys.py            Customer API keys: hashing, limits, storage logic
+leads.py           Registration (leads), free trial, access-code protection, Google Sheet webhook
+manage_leads.py    Admin CLI: list / export / delete registered people
+docs/leads_apps_script.gs  Google Apps Script that receives leads into a Sheet
 manage_keys.py     Admin CLI: create / list / revoke keys
 INTEGRATION.md     Short guide to give to customers (endpoint, limits, examples)
 docs/index.html    Full documentation site, served by the API at its root URL (/)
@@ -57,6 +60,7 @@ local_test.py      Run the models on your laptop, no Modal needed
 tests/test_api.py      API tests against the deployed endpoint
 tests/test_backend.py  Unit tests for backend_client (no network)
 tests/test_keys.py     Unit tests for key logic (no network)
+tests/test_leads.py    Unit tests for leads, trial and access-code logic (no network)
 ```
 
 ## Setup
@@ -121,19 +125,33 @@ The API serves its own documentation (no login needed):
 - `/docs` : interactive Swagger UI with an **Authorize** button; `/redoc` : reference view;
   `/openapi.json` : machine-readable spec.
 
-## Give the API to other people (customer keys)
+## Public access: registration, free trial and access code
 
-Each customer gets their own key with limits (default 20 requests/minute, 200/day):
+The web UI is public. Before the model runs, a visitor registers (name, email, optional phone, consent):
 
-- **Self-service:** open the web UI, tab **API access**, enter a name and click *Generate my key* (needs the UI
-  password; at most 20 self-service keys exist at once).
-- **Admin:** `python manage_keys.py create --name my-shop` or the UI **Admin** tab (separate admin password).
-- Only a hash of each key is stored. Revoke with `manage_keys.py revoke --name ...` (takes effect in ~30 s).
-- Endpoint: `POST /v1/moderate` (the old `/moderate` still works). `GET /v1/usage` shows a key's usage.
+- **Free trial:** `TRIAL_CHECKS` (2) image checks per person in total, shared between the web app and the API.
+  A global daily cap (`GLOBAL_TRIAL_PER_DAY`) protects the free cloud credits.
+- **Access code:** a person who enters the owner's code (Modal secret `unlimited-code`) gets unlimited use.
+  The code is verified with brute-force protection and is never stored in the repository.
+- **API keys:** a registered person can generate a key in the UI (API access tab). Free-trial keys share the
+  person's trial; keys created while the access code is unlocked have no limits. Owner-issued keys
+  (`manage_keys.py` or the UI Admin tab) can have custom limits.
+- **Leads:** name, email and phone are saved in a `modal.Dict` (backed up daily to the Volume) and, if configured,
+  appended to a Google Sheet through an Apps Script web app (`docs/leads_apps_script.gs`). Images are never stored.
+- **Privacy:** consent checkbox + notice in the UI. Delete a person with `python manage_leads.py delete --email ...`
+  (or the Admin tab). Export with `python manage_leads.py export leads.csv`.
 - Your own key (Modal secret `moderation-auth`) stays valid as the admin key and has no limits.
-- Keys live in a `modal.Dict` (expires after 7 idle days), so a daily job (`maintain_keys`) refreshes it and
-  keeps a backup in the Volume.
-- Needs one more secret: `modal secret create ui-admin UI_ADMIN_PASSWORD=<admin-password>`.
+- Keys and leads live in a `modal.Dict` (expires after 7 idle days), so a daily job (`maintain_keys`) refreshes
+  them, keeps a backup in the Volume and retries Google Sheet writes that failed.
+
+Secrets to create once:
+
+```bash
+modal secret create moderation-auth MODERATION_API_KEY=<long-random-string>
+modal secret create ui-admin UI_ADMIN_PASSWORD=<admin-password>
+modal secret create unlimited-code UNLIMITED_ACCESS_CODE=<access-code>
+modal secret create leads-sink LEADS_WEBHOOK_URL=<apps-script-web-app-url> LEADS_WEBHOOK_TOKEN=<random-token>
+```
 
 See `INTEGRATION.md` for what to hand to customers (limits, errors, code examples).
 

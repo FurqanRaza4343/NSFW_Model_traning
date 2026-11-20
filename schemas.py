@@ -20,8 +20,8 @@ class ErrorDetail(BaseModel):
 
 
 class UsageLimits(BaseModel):
-    per_minute: int
-    per_day: int
+    per_minute: Optional[int] = None
+    per_day: Optional[int] = None
 
 
 class UsageCounts(BaseModel):
@@ -34,4 +34,6 @@ class UsageResponse(BaseModel):
     name: str
     limits: Optional[UsageLimits] = None
     used: Optional[UsageCounts] = None
+    unlimited: Optional[bool] = None
+    trial: Optional[Dict[str, int]] = None      # {"limit": 2, "used": 1} for free-trial keys
     note: Optional[str] = None
