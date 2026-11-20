@@ -8,6 +8,7 @@ Rules enforced here (not in the UI), so every code path follows them:
 """
 import base64
 import hashlib
+import json
 import os
 import threading
 from typing import Optional, Tuple
@@ -68,8 +69,11 @@ def record_check(url: str, token: str, result: dict, data: bytes, source: str, p
                  lead: Optional[dict] = None, consent: bool = False, label: str = "") -> bool:
     if not sink_v2():
         return False
-    payload, _ = build_payload(result, data, source, person, lead, consent, label)
-    return leadlib.send_webhook(url, token, payload, timeout=60.0)
+    payload, stored = build_payload(result, data, source, person, lead, consent, label)
+    ok = leadlib.send_webhook(url, token, payload, timeout=60.0)
+    # monitoring line for the logs: no names, no emails, no image content
+    print(json.dumps({"event": "check_recorded", "ok": ok, "image_sent": stored, "decision": result["decision"], "source": source}))
+    return ok
 
 
 def record_check_async(*args, **kwargs) -> None:
