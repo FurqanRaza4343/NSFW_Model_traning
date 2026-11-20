@@ -84,14 +84,14 @@ BADGE = {
 ACCESS_CODE = os.environ.get("UNLIMITED_ACCESS_CODE", "")
 SINK_URL = os.environ.get("LEADS_WEBHOOK_URL", "")
 SINK_TOKEN = os.environ.get("LEADS_WEBHOOK_TOKEN", "")
-CONTACT = "linkedin.com/in/furqan-raza-879504351"
+CONTACT = os.environ.get("CONTACT_INFO", "")      # optional; no personal details are hard-coded
 CONSENT = ("I agree that my name, email and phone number are stored and used to give me access and to contact me "
            f"about this project, and that images I upload (except rejected ones) may be kept for up to "
            f"{config.IMAGE_RETENTION_DAYS} days to review and improve the service.")
 PRIVACY = (f"**What is kept:** your name, email and phone (optional); for every check its decision, scores and an image "
            f"fingerprint (hash, not the picture). Images that are approved or flagged for review are kept for up to "
            f"{config.IMAGE_RETENTION_DAYS} days in the owner's private storage. **Images that are rejected are never kept.** "
-           f"To have your data and images deleted, contact the owner: {CONTACT}")
+           f"To have your data and images deleted, contact the owner{': ' + CONTACT if CONTACT else ''}.")
 
 
 @st.cache_resource
@@ -136,10 +136,11 @@ def registration_form(prefix):
         name = st.text_input("Full name")
         email = st.text_input("Email")
         phone = st.text_input("Phone number" + ("" if config.REQUIRE_PHONE else " (optional)"))
-        consent = st.checkbox(CONSENT)
+        consent = st.checkbox(CONSENT) if config.REQUIRE_CONSENT else False
         code = st.text_input("Access code (optional, for unlimited use)", type="password")
         go = st.form_submit_button("Continue")
-    st.caption(PRIVACY)
+    if config.SHOW_PRIVACY_NOTICE:
+        st.caption(PRIVACY)
     if go:
         try:
             lid, rec, is_new = get_leads().register(name, email, phone, consent)
@@ -331,8 +332,9 @@ If an error occurs (corrupt file, timeout) keep the image **private**; never pub
                 m1.metric("Labelled images", len(labelled))
                 m2.metric("False positives (safe image flagged)", f"{false_pos} / {len(safe)}")
                 m3.metric("False negatives (unsafe image approved)", f"{false_neg} / {len(unsafe)}")
-        with st.expander("Privacy"):
-            st.markdown(PRIVACY)
+        if config.SHOW_PRIVACY_NOTICE:
+            with st.expander("Privacy"):
+                st.markdown(PRIVACY)
 
 # =====================================================================================
 # Tab 2: API access
@@ -580,7 +582,7 @@ Policy: nudity, including artistic nudity, is never auto-approved.
 - The thresholds are starting values chosen from a small sample. Calibrate them on your own legal images
   (see `evaluate.py` in the repository) before relying on them.
 - Always keep a human review path for the `review` decision, and keep images private when the API fails.
-- Images that are rejected are never kept. Images of registered people that are approved or flagged for review are kept for a limited time (see the Privacy note) and then deleted; scores and a hash are logged for every check.
+- Rejected images are never kept. For every check the decision, scores and an image fingerprint (hash) are logged.
 """
     )
 

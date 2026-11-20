@@ -155,7 +155,7 @@ footer{border-top:1px solid var(--line);padding:24px 20px;text-align:center;colo
     <div class="card"><h4>Three models, one decision</h4><p>An ensemble of three open models. The most cautious answer wins, so one model's miss is caught by another.</p></div>
     <div class="card"><h4>Nudity is never auto-approved</h4><p>Explicit and artistic nudity is rejected or sent to review. Borderline images go to a human, not to your users.</p></div>
     <div class="card"><h4>Free trial, then your own key</h4><p>Register for a small free trial. An access code from the owner unlocks unlimited use, and keys can be revoked at any time.</p></div>
-    <div class="card"><h4>Private by design</h4><p>Rejected images are never kept. Approved or review images of consenting users are deleted after __RETENTION__ days. Logs hold scores and fingerprints only.</p></div>
+    <div class="card"><h4>Private by design</h4><p>Rejected images are never kept. Logs hold scores and image fingerprints, not pictures. Storage of approved / review images exists only for keys where the owner enabled it.</p></div>
     <div class="card"><h4>Fail-private contract</h4><p>The API is built around one rule: if anything goes wrong, keep the image private.</p></div>
   </div>
 
@@ -403,7 +403,7 @@ def check_image(path):
 <section id="security">
   <h2>Security &amp; privacy</h2>
   <ul>
-    <li><b>What is kept.</b> For every check: the decision, scores, image size and a SHA-256 fingerprint (not the picture). The image itself is kept only for registered users and for keys the owner enabled, only when it was approved or flagged for review, and for at most __RETENTION__ days. <b>Rejected images are never kept.</b></li>
+    <li><b>What is kept.</b> For every check: the decision, scores, image size and a SHA-256 fingerprint (not the picture). The image itself is kept only for keys where the owner enabled storage, only when it was approved or flagged for review, and for at most __RETENTION__ days. <b>Rejected images are never kept.</b></li>
     <li><b>Logs contain no images or file names.</b> Only the decision, scores, key name, image size and timing are logged, for monitoring.</li>
     <li><b>Keys are stored as hashes</b> and are never shown again after creation.</li>
     <li><b>HTTPS only.</b> All traffic is encrypted in transit.</li>
@@ -427,7 +427,7 @@ def check_image(path):
   <h3>How do I get more than the free trial?</h3>
   <p>Ask the service owner for an access code (unlimited use) or for a key with custom limits.</p>
   <h3>What personal data do you store?</h3>
-  <p>When you register in the web UI we store your name, email and optional phone number to give you access and to contact you about this project. Images you upload are checked in memory; approved or review images may be kept for up to __RETENTION__ days (rejected images are never kept). To have your data and images deleted, contact the owner.</p>
+  <p>When you register in the web UI we store your name, email and optional phone number to give you access and to contact you about this project. Images you upload are checked in memory. Rejected images are never kept; approved or review images are kept only for keys where the owner enabled storage (up to __RETENTION__ days). To have your data deleted, contact the owner.</p>
   <h3>What happens if I lose my key?</h3>
   <p>It cannot be recovered. Ask for the old key to be revoked and generate a new one.</p>
   <h3>Is the decision always correct?</h3>

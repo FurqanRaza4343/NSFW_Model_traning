@@ -104,7 +104,7 @@ See the **API access** tab of the UI. Those snippets are standard patterns that 
 - **Call the API from your own backend** whenever you can. A key placed in website JavaScript or inside a mobile app can be extracted by anyone.
 - If you must call from a browser, create the key with **allowed websites** so browser requests from other sites are rejected (this does not stop non-browser clients).
 - Keys are stored only as hashes. A lost key cannot be recovered; ask the admin to revoke it and create a new one.
-- For every check we log the decision, scores and a SHA-256 fingerprint of the image. The image itself is kept only for registered users and for keys the owner enabled, only if it was approved or flagged for review, for a limited time. **Rejected images are never kept.**
+- For every check we log the decision, scores and a SHA-256 fingerprint of the image. The image itself is kept only for keys the owner enabled for storage, only if it was approved or flagged for review, for a limited time. **Rejected images are never kept.**
 
 ## For the admin
 

@@ -40,7 +40,6 @@ def test_register_normalises_and_is_idempotent():
     ("Ali Khan", "not-an-email", "", True),
     ("Ali Khan", "a@b.co", "12", True),                # phone too short
     ("Ali Khan", "a@b.co", "abc-defg-hij", True),
-    ("Ali Khan", "a@b.co", "", False),                 # no consent
 ])
 def test_validation(name, email, phone, consent):
     s, _ = store()
@@ -125,3 +124,19 @@ def test_global_code_lockout():
 def test_webhook_is_safe_when_not_configured():
     assert leads.send_webhook("", "tok", {"a": 1}) is False
     assert leads.send_webhook("not-set", "tok", {"a": 1}) is False
+
+
+def test_consent_is_optional_by_default_and_controls_image_consent():
+    s, _ = store()
+    lid, rec, _ = s.register("Ali Khan", "a@b.co", "", False)          # no checkbox in the UI
+    assert rec["image_consent"] is False and rec["consent_at"] == ""
+    lid2, rec2, _ = s.register("Bo Lee", "b@b.co", "", True)
+    assert rec2["image_consent"] is True and rec2["consent_at"]
+
+
+def test_consent_can_be_required(monkeypatch):
+    monkeypatch.setattr(config, "REQUIRE_CONSENT", True)
+    s, _ = store()
+    with pytest.raises(leads.LeadError):
+        s.register("Ali Khan", "a@b.co", "", False)
+    assert s.register("Ali Khan", "a@b.co", "", True)[2]

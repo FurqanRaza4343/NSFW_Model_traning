@@ -32,6 +32,8 @@ LEADS_DICT = "moderation-leads"       # modal.Dict: sha256(email) -> lead record
 TRIAL_CHECKS = 2                     # free image checks per registered person
 GLOBAL_TRIAL_PER_DAY = 300           # free checks per day across everyone (protects the free credits)
 REQUIRE_PHONE = False                # set True to make the phone number mandatory
+REQUIRE_CONSENT = False              # True: registration shows a consent checkbox (and enables image retention)
+SHOW_PRIVACY_NOTICE = False          # True: show the privacy note in the UI
 
 # --- Image retention (only for people who agreed; see retention.py) ---
 STORE_IMAGES = True                  # master switch. Stored only if the Apps Script has a Drive folder set

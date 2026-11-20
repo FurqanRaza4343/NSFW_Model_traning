@@ -127,7 +127,7 @@ The API serves its own documentation (no login needed):
 
 ## Public access: registration, free trial and access code
 
-The web UI is public. Before the model runs, a visitor registers (name, email, optional phone, consent):
+The web UI is public. Before the model runs, a visitor registers (name, email, optional phone):
 
 - **Free trial:** `TRIAL_CHECKS` (2) image checks per person in total, shared between the web app and the API.
   A global daily cap (`GLOBAL_TRIAL_PER_DAY`) protects the free cloud credits.
@@ -138,7 +138,9 @@ The web UI is public. Before the model runs, a visitor registers (name, email, o
   (`manage_keys.py` or the UI Admin tab) can have custom limits.
 - **Leads:** name, email and phone are saved in a `modal.Dict` (backed up daily to the Volume) and, if configured,
   appended to a Google Sheet through an Apps Script web app (`docs/leads_apps_script.gs`). Images are never stored.
-- **Privacy:** consent checkbox + notice in the UI. Delete a person with `python manage_leads.py delete --email ...`
+- **Privacy:** the consent checkbox and the privacy note are optional (`REQUIRE_CONSENT`, `SHOW_PRIVACY_NOTICE` in
+  `config.py`, both off by default). Image retention needs explicit consent, so with the checkbox off nothing
+  but the lead details and per-check records is kept for web registrations. Delete a person with `python manage_leads.py delete --email ...`
   (or the Admin tab). Export with `python manage_leads.py export leads.csv`.
 - Your own key (Modal secret `moderation-auth`) stays valid as the admin key and has no limits.
 - Keys and leads live in a `modal.Dict` (expires after 7 idle days), so a daily job (`maintain_keys`) refreshes
@@ -189,4 +191,4 @@ false positives. Copy the chosen values into `config.py` and run `modal deploy m
 
 - These are classifiers, not guarantees: expect false positives and false negatives.
 - Cold start: the first request after idle takes about 10-15 s.
-- Rejected images are never stored. Images of consenting users (approved or review) are kept for a limited time, see Privacy above.
+- Rejected images are never stored. Approved / review images are kept (up to `IMAGE_RETENTION_DAYS`) only for people who agreed or keys the owner enabled.

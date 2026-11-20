@@ -30,7 +30,7 @@ def lead_id(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
-def clean(name: str, email: str, phone: str, consent: bool, require_phone: bool = False) -> Dict[str, str]:
+def clean(name: str, email: str, phone: str, consent: bool = False, require_phone: bool = False) -> Dict[str, str]:
     name = " ".join((name or "").split())
     email = (email or "").strip().lower()
     phone = (phone or "").strip()
@@ -44,7 +44,7 @@ def clean(name: str, email: str, phone: str, consent: bool, require_phone: bool 
             raise LeadError("Please enter a valid phone number (digits, +, spaces, dashes).")
     elif require_phone:
         raise LeadError("Please enter your phone number.")
-    if not consent:
+    if config.REQUIRE_CONSENT and not consent:
         raise LeadError("Please tick the consent box to continue.")
     return {"name": name, "email": email, "phone": phone}
 
@@ -59,7 +59,7 @@ class LeadStore:
         return datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(timespec="seconds")
 
     # ----- registration -----
-    def register(self, name: str, email: str, phone: str, consent: bool) -> Tuple[str, dict, bool]:
+    def register(self, name: str, email: str, phone: str, consent: bool = False) -> Tuple[str, dict, bool]:
         """Return (lead_id, record, is_new). An existing email just continues (trial is never reset,
         and details from an unauthenticated visitor never overwrite what is stored)."""
         data = clean(name, email, phone, consent, config.REQUIRE_PHONE)
@@ -67,9 +67,11 @@ class LeadStore:
         rec = self.leads.get(lid)
         if rec:
             return lid, rec, False
-        rec = {**data, "created": self._now_iso(), "consent_at": self._now_iso(),
+        # Images are only ever kept for people who explicitly agreed (image_consent). Without a consent
+        # checkbox nobody has agreed, so nothing but the lead details and the per-check records is kept.
+        rec = {**data, "created": self._now_iso(), "consent_at": self._now_iso() if consent else "",
                "trial_used": 0, "webhook_sent": False, "source": "ui",
-               "image_consent": True}        # the registration text covers keeping approved/review images
+               "image_consent": bool(consent)}
         self.leads[lid] = rec
         return lid, rec, True
 
