@@ -189,4 +189,4 @@ false positives. Copy the chosen values into `config.py` and run `modal deploy m
 
 - These are classifiers, not guarantees: expect false positives and false negatives.
 - Cold start: the first request after idle takes about 10-15 s.
-- Images are processed in memory and not stored by this service.
+- Rejected images are never stored. Images of consenting users (approved or review) are kept for a limited time, see Privacy above.

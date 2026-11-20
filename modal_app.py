@@ -28,12 +28,14 @@ image = (
         extra_index_url="https://download.pytorch.org/whl/cpu",
     )
     .env({"HF_HOME": config.CACHE_DIR})
-    .add_local_python_source("config", "classifier", "schemas", "keys", "leads")
+    .add_local_python_source("config", "classifier", "schemas", "keys", "leads", "retention")
     .add_local_dir("docs", "/root/docs")   # documentation page served at "/"
 )
 
 volume = modal.Volume.from_name(config.VOLUME_NAME, create_if_missing=True)
 secret = modal.Secret.from_name(config.SECRET_NAME)
+sink_secret = modal.Secret.from_name("leads-sink")           # LEADS_WEBHOOK_URL + LEADS_WEBHOOK_TOKEN
+code_secret = modal.Secret.from_name("unlimited-code")       # UNLIMITED_ACCESS_CODE
 
 
 @app.function(image=image, volumes={config.CACHE_DIR: volume}, timeout=600)
@@ -49,7 +51,7 @@ def download_model():
 @app.cls(
     image=image,
     volumes={config.CACHE_DIR: volume},
-    secrets=[secret],
+    secrets=[secret, sink_secret],
     timeout=config.REQUEST_TIMEOUT_S,
     scaledown_window=60,   # container stops 60 s after the last request (saves credits)
     cpu=1,
@@ -81,6 +83,7 @@ class Moderator:
 
         import keys as keylib
         import leads as leadlib
+        import retention
         from classifier import ImageError
         from schemas import ErrorDetail, ModerationResponse, UsageResponse
 
@@ -183,6 +186,7 @@ class Moderator:
             "__PER_MIN__": str(config.DEFAULT_PER_MINUTE),
             "__PER_DAY__": str(config.DEFAULT_PER_DAY),
             "__TRIAL__": str(config.TRIAL_CHECKS),
+            "__RETENTION__": str(config.IMAGE_RETENTION_DAYS),
             "__MAX_MB__": str(config.MAX_IMAGE_BYTES // (1024 * 1024)),
             "__MAX_MP__": str(config.MAX_IMAGE_PIXELS // 1_000_000),
             "__REJECT__": f"{config.REJECT_THRESHOLD:.2f}",
@@ -244,7 +248,7 @@ class Moderator:
             `approve` = safe to publish, `review` = hold for a human, `reject` = do not publish.
             On any error or timeout keep the image private.
             """
-            name, _ = authenticate(bearer_header(credentials), origin)
+            name, h = authenticate(bearer_header(credentials), origin)
 
             data = file.file.read(config.MAX_IMAGE_BYTES + 1)
             try:
@@ -262,6 +266,17 @@ class Moderator:
                 "nsfw": result["nsfw_score"], "suggestive": result["suggestive_score"],
                 "ms": result["latency_ms"], "bytes": len(data),
             }))
+
+            # Record the check (scores + fingerprint). The image itself is kept only for people who agreed
+            # (registered users, or keys the owner enabled) and never when it was rejected: see retention.py.
+            if h is not None:                                   # the owner's master key is never recorded
+                krec = record_cache[h][0]
+                lead_rec = leadstore.get(krec["lead"]) if krec.get("lead") else None
+                consent = bool(krec.get("store_images") or (lead_rec and lead_rec.get("image_consent")))
+                retention.record_check_async(
+                    os.environ.get("LEADS_WEBHOOK_URL", ""), os.environ.get("LEADS_WEBHOOK_TOKEN", ""),
+                    result, data, "api", (krec.get("lead") or "")[:12], lead_rec, consent, label=name,
+                )
             return result
 
         error_responses = {
@@ -297,8 +312,6 @@ light_image = (
     .pip_install("httpx==0.28.1")
     .add_local_python_source("config", "keys", "leads")
 )
-sink_secret = modal.Secret.from_name("leads-sink")           # LEADS_WEBHOOK_URL + LEADS_WEBHOOK_TOKEN
-code_secret = modal.Secret.from_name("unlimited-code")       # UNLIMITED_ACCESS_CODE
 
 
 def _backup_dict(d, path):
@@ -343,7 +356,7 @@ def maintain_keys():
 ui_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("streamlit==1.40.2", "pillow", "pandas", "httpx==0.28.1")
-    .add_local_python_source("config", "keys", "leads")
+    .add_local_python_source("config", "keys", "leads", "retention")
     .add_local_file("ui_app.py", "/root/ui_app.py")
 )
 ui_admin_secret = modal.Secret.from_name("ui-admin")

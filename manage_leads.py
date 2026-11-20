@@ -9,11 +9,15 @@ The same data is visible in the UI Admin tab and (if configured) in your Google 
 import argparse
 import csv
 
+import os
+
 import modal
+from dotenv import load_dotenv
 
 import config
 import keys as keylib
 import leads as leadlib
+import retention
 
 
 def stores():
@@ -53,7 +57,11 @@ def main():
             lid = leadlib.lead_id(args.email)
             for prefix in ("lead-", "vip-"):
                 ks.revoke(prefix + lid[:10])
-            print("Deleted the person and revoked their keys. Remember to delete their row in the Google Sheet too.")
+            load_dotenv()
+            gone = retention.delete_person(os.environ.get("LEADS_WEBHOOK_URL", ""), os.environ.get("LEADS_WEBHOOK_TOKEN", ""), lid[:12])
+            print("Deleted the person and revoked their keys.",
+                  "Their stored images were deleted from Drive." if gone else "Could not reach the Drive script: delete their images in Drive by hand.",
+                  "Also delete their rows in the Google Sheet.")
         else:
             print("No lead with that email.")
 

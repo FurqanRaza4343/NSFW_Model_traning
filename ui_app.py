@@ -5,7 +5,8 @@ Runs on Modal (see modal_app.py) or locally:  streamlit run ui_app.py
 
 Public access: visitors register (name, email, optional phone, consent) and get a small free trial
 (config.TRIAL_CHECKS checks in total). An access code from the owner unlocks unlimited use.
-Images are processed in memory and never stored.
+Images of registered people are kept for config.IMAGE_RETENTION_DAYS days only if approved or flagged for review
+(never when rejected); see retention.py. Scores and an image fingerprint are logged for every check.
 """
 import hmac
 import io
@@ -18,6 +19,7 @@ from PIL import Image
 
 import config
 import leads as leadlib
+import retention
 
 st.set_page_config(page_title="Image Moderation", page_icon="🛡️", layout="wide")
 
@@ -84,9 +86,12 @@ SINK_URL = os.environ.get("LEADS_WEBHOOK_URL", "")
 SINK_TOKEN = os.environ.get("LEADS_WEBHOOK_TOKEN", "")
 CONTACT = "linkedin.com/in/furqan-raza-879504351"
 CONSENT = ("I agree that my name, email and phone number are stored and used to give me access and to contact me "
-           "about this project.")
-PRIVACY = ("Your uploaded images are processed in memory and are **not stored**. Only your name, email and phone "
-           f"(optional) are saved. To have your data deleted, contact the owner: {CONTACT}")
+           f"about this project, and that images I upload (except rejected ones) may be kept for up to "
+           f"{config.IMAGE_RETENTION_DAYS} days to review and improve the service.")
+PRIVACY = (f"**What is kept:** your name, email and phone (optional); for every check its decision, scores and an image "
+           f"fingerprint (hash, not the picture). Images that are approved or flagged for review are kept for up to "
+           f"{config.IMAGE_RETENTION_DAYS} days in the owner's private storage. **Images that are rejected are never kept.** "
+           f"To have your data and images deleted, contact the owner: {CONTACT}")
 
 
 @st.cache_resource
@@ -261,6 +266,9 @@ If an error occurs (corrupt file, timeout) keep the image **private**; never pub
                             get_leads().refund_trial(lid)      # no result was delivered: give the check back
                     st.session_state["cache"][key] = res
                     consumed_now = True
+                    if "error" not in res:
+                        retention.record_check_async(SINK_URL, SINK_TOKEN, res, data, "web", lid[:12], lead,
+                                                     bool(lead.get("image_consent")))
                 res = st.session_state["cache"][key]
 
                 c1, c2 = st.columns([1, 2])
@@ -572,7 +580,7 @@ Policy: nudity, including artistic nudity, is never auto-approved.
 - The thresholds are starting values chosen from a small sample. Calibrate them on your own legal images
   (see `evaluate.py` in the repository) before relying on them.
 - Always keep a human review path for the `review` decision, and keep images private when the API fails.
-- Images are processed in memory and are not stored by this service.
+- Images that are rejected are never kept. Images of registered people that are approved or flagged for review are kept for a limited time (see the Privacy note) and then deleted; scores and a hash are logged for every check.
 """
     )
 
@@ -611,7 +619,11 @@ with tab_admin:
                         lid_del = leadlib.lead_id(em)
                         for prefix in ("lead-", "vip-"):
                             store.revoke(prefix + lid_del[:10])
-                        st.success("Deleted. (Remember to remove the row from the Google Sheet too.)")
+                        gone = retention.delete_person(SINK_URL, SINK_TOKEN, lid_del[:12])
+                        st.success("Deleted from Modal and keys revoked. "
+                                   + ("Stored images were deleted from Drive." if gone else
+                                      "Could not reach the Drive script: delete their images in Drive by hand.")
+                                   + " Also remove their rows from the Google Sheet.")
                     else:
                         st.warning("No lead with that email.")
 
@@ -637,6 +649,8 @@ with tab_admin:
             with st.form("admin_create"):
                 an = st.text_input("Name")
                 unl_admin = st.checkbox("Unlimited (no limits at all)")
+                keep_admin = st.checkbox("The customer agreed that approved / review images are kept for "
+                                         f"{config.IMAGE_RETENTION_DAYS} days")
                 ap1, ap2 = st.columns(2)
                 pm = ap1.number_input("Per minute (ignored if unlimited)", 1, 1000, config.DEFAULT_PER_MINUTE)
                 pd_ = ap2.number_input("Per day (ignored if unlimited)", 1, 100000, config.DEFAULT_PER_DAY)
@@ -644,7 +658,8 @@ with tab_admin:
                 if st.form_submit_button("Create"):
                     try:
                         k, rec = store.create(an, source="admin", per_minute=int(pm), per_day=int(pd_),
-                                              origins=[o for o in ao.split(",") if o.strip()], unlimited=unl_admin)
+                                              origins=[o for o in ao.split(",") if o.strip()], unlimited=unl_admin,
+                                              store_images=keep_admin)
                         st.success("Created. Copy it now (shown once):")
                         st.code(k, language="text")
                     except keylib.KeyError_ as e:

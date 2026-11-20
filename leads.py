@@ -68,7 +68,8 @@ class LeadStore:
         if rec:
             return lid, rec, False
         rec = {**data, "created": self._now_iso(), "consent_at": self._now_iso(),
-               "trial_used": 0, "webhook_sent": False, "source": "ui"}
+               "trial_used": 0, "webhook_sent": False, "source": "ui",
+               "image_consent": True}        # the registration text covers keeping approved/review images
         self.leads[lid] = rec
         return lid, rec, True
 

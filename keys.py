@@ -80,7 +80,7 @@ class KeyStore:
 
     def create(self, name: str, source: str = "admin", per_minute: Optional[int] = None,
                per_day: Optional[int] = None, origins=None, lead: Optional[str] = None,
-               unlimited: bool = False) -> Tuple[str, dict]:
+               unlimited: bool = False, store_images: bool = False) -> Tuple[str, dict]:
         name = (name or "").strip()
         if not NAME_RE.match(name):
             raise KeyError_("Name must be 2-40 characters: letters, digits, space, dot, dash, underscore.")
@@ -98,6 +98,7 @@ class KeyStore:
             "per_day": None if (lead or unlimited) else int(per_day or config.DEFAULT_PER_DAY),
             "lead": lead,
             "unlimited": bool(unlimited),
+            "store_images": bool(store_images),     # owner-issued keys: only when the customer agreed to it
             "origins": normalize_origins(origins),
             "active": True,
             "source": source,

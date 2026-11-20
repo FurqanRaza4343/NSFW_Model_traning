@@ -33,6 +33,11 @@ TRIAL_CHECKS = 2                     # free image checks per registered person
 GLOBAL_TRIAL_PER_DAY = 300           # free checks per day across everyone (protects the free credits)
 REQUIRE_PHONE = False                # set True to make the phone number mandatory
 
+# --- Image retention (only for people who agreed; see retention.py) ---
+STORE_IMAGES = True                  # master switch. Stored only if the Apps Script has a Drive folder set
+STORE_DECISIONS = ("approve", "review")   # REJECTED images are never stored, only scores + SHA-256
+IMAGE_RETENTION_DAYS = 30            # the Apps Script deletes stored images after this many days
+
 
 # --- Decision policy (PROVISIONAL - calibrate on your own labelled images) ---
 # nsfw_score = max(Falconsai nsfw, Marqo NSFW, Luke porn+hentai)   -> explicit content
